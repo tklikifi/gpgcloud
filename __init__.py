@@ -22,13 +22,14 @@ Security and privacy
 3. Encryption keys MUST NOT be stored to cloud.
 4. Encryption keys MUST be protected by passphrase.
 5. Data MUST be encrypted using `AES-256` algorithm.
-6. All checksums MUST be calculated using `SHA-512` algorithm.
+6. All checksums MUST be calculated using `SHA-256` algorithm.
 7. All temporary files created locally MUST be protected with `0600`
    permissions.
 
 Dependencies
 ------------
-GPG must be installed. The current version of `gpgcloud` is tested using:
+GPG must be installed. The current version of `gpgcloud` is developed
+and tested using:
 
 * gpg (GnuPG/MacGPG2) 2.0.22 (libgcrypt 1.5.3).
 
@@ -46,26 +47,73 @@ All code MUST have unit tests.
 
 Functionality
 -------------
+
 TBD.
 
 Performance
 -----------
+
 TBD.
 
 Scalability
 -----------
+
 TBD.
 
 Architecture
 ============
+
 TBD.
 
 User stories
 ============
+
+The basic functionality of the tool is described as user stories.
+
+Backup one file to cloud
+------------------------
+
+I, as the user of the tool, want to be able to store one file to cloud so
+that no information about where the data comes or what the data is is
+revealed to the cloud provider.
+
+The data must be identified only by the hash of the original data. The
+information about the available files (metadata) must be stored separately
+either in cloud or locally. This metadata must also be encrypted so that no
+information is revealed to cloud provider.
+
+List available files in cloud
+-----------------------------
+
+I, as the user of the tool, want to be able to list all files stored to cloud.
+It must be possible to see the metadata of the stored files, similar to `ls
+-l` output:
+
+* original file name with absolute path
+* creation and modification timestamps of the original file
+* permissions of the original file
+* owner and group of the original file
+* file hash
+
+Restore one file from the cloud
+-------------------------------
+
+I, as the user of the tool, want to be able to restore one file from cloud to
+local directory, either to original location or to a given location with a
+given a file name. The file hash is used as the key to files in cloud.
+
+Backup directory to cloud
+-------------------------
+
+TBD.
+
+Restore directory from cloud
+----------------------------
+
 TBD.
 
 """
 
 __author__ = "Tommi Linnakangas"
 __date__ = "2014-03-16"
-__version__ = "0.1.0"
+__version__ = "0.0.0"
