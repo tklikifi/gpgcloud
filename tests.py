@@ -1,8 +1,9 @@
+import data
 import os
 import tempfile
 import unittest
 from aws import Aws
-from data import list_aws, File
+from data import AwsData
 from config import Config, ConfigError
 from utils import random_string, checksum_file, checksum_data
 
@@ -119,7 +120,7 @@ class TestAws(unittest.TestCase):
         for data, metadata in (("Data 1", "Metadata 1"),
                                ("Data 2", "Metadata 2")):
             key = checksum_data(data)
-            aws.store_data(key, data, metadata)
+            aws.store(key, data, metadata)
             new_data, new_metadata = aws.retrieve(key)
             self.assertEqual(new_data, data)
             self.assertEqual(new_metadata, metadata)
@@ -137,9 +138,9 @@ class TestAws(unittest.TestCase):
                   c.config.get("aws", "secret_access_key"),
                   c.config.get("aws", "bucket"))
         key = checksum_file("LICENSE")
-        aws.store_file(key, "LICENSE", "LICENSE METADATA")
+        aws.store_from_filename(key, "LICENSE", "LICENSE METADATA")
         t = tempfile.NamedTemporaryFile()
-        metadata = aws.retrieve_file(key, t.name)
+        metadata = aws.retrieve_to_filename(key, t.name)
         self.assertEqual(file("LICENSE").read(), file(t.name).read())
         self.assertEqual("LICENSE METADATA", metadata)
         aws.delete(key)
@@ -157,37 +158,53 @@ class TestData(unittest.TestCase):
     def setUp(self):
         pass
 
-    def test_store_file(self):
+    def test_store_data(self):
         c = Config()
-        data_file_1 = File("testdata/data1.txt", config=c)
-        data_file_1.store_aws()
-        data_file_2 = File("testdata/data2.txt", config=c)
-        data_file_2.store_aws()
+        aws_data = AwsData(config=c)
+        data1 = file("testdata/data1.txt").read()
+        data2 = file("testdata/data2.txt").read()
+        key1 = aws_data.store(data1, "testdata/data1.txt")
+        key2 = aws_data.store(data2, "testdata/data2.txt")
+        for key, metadata in aws_data.list().items():
+            if key == key1:
+                self.assertEqual("testdata/data1.txt", metadata["path"])
+            if key == key2:
+                self.assertEqual("testdata/data2.txt", metadata["path"])
+        new_data1, new_metadata_1 = aws_data.retrieve(key1)
+        new_data2, new_metadata_2 = aws_data.retrieve(key2)
+        self.assertEqual(data1, new_data1)
+        self.assertEqual("testdata/data1.txt", new_metadata_1["path"])
+        self.assertEqual(data2, new_data2)
+        self.assertEqual("testdata/data2.txt", new_metadata_2["path"])
+        aws_data.delete(key1)
+        aws_data.delete(key2)
 
-        for key, metadata in list_aws().items():
-            if key == data_file_1.key:
-                self.assertEqual(data_file_1.filename, metadata["name"])
-            if key == data_file_2.key:
-                self.assertEqual(data_file_2.filename, metadata["name"])
-
-        new_data_file_1 = File("testdata/new_data1.txt", config=c)
-        new_data_file_1.key = data_file_1.key
-        new_data_file_1.retrieve_aws()
-        self.assertEqual(
-            file("testdata/data1.txt").read(),
-            file("testdata/new_data1.txt").read())
+    def test_store_filename(self):
+        c = Config()
+        aws_data = AwsData(config=c)
+        data1 = file("testdata/data1.txt").read()
+        data2 = file("testdata/data2.txt").read()
+        key1 = aws_data.store_from_filename("testdata/data1.txt")
+        key2 = aws_data.store_from_filename("testdata/data2.txt")
+        for key, metadata in aws_data.list().items():
+            print metadata
+            if key == key1:
+                self.assertEqual("testdata/data1.txt", metadata["path"])
+            if key == key2:
+                self.assertEqual("testdata/data2.txt", metadata["path"])
+        new_metadata_1 = aws_data.retrieve_to_filename(
+            key1, "testdata/new_data1.txt")
+        new_metadata_2 = aws_data.retrieve_to_filename(
+            key2, "testdata/new_data2.txt")
+        self.assertEqual(data1, file("testdata/new_data1.txt").read())
+        self.assertEqual("testdata/data1.txt", new_metadata_1["path"])
+        self.assertEqual(data2, file("testdata/new_data2.txt").read())
+        self.assertEqual("testdata/data2.txt", new_metadata_2["path"])
+        aws_data.delete(key1)
+        aws_data.delete(key2)
         os.remove("testdata/new_data1.txt")
-
-        new_data_file_2 = File("testdata/new_data2.txt", config=c)
-        new_data_file_2.key = data_file_2.key
-        new_data_file_2.retrieve_aws()
-        self.assertEqual(
-            file("testdata/data2.txt").read(),
-            file("testdata/new_data2.txt").read())
         os.remove("testdata/new_data2.txt")
 
-        data_file_1.delete_aws()
-        data_file_2.delete_aws()
 
 if __name__ == "__main__":
     unittest.main()

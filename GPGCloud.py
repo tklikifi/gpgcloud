@@ -4,9 +4,12 @@ Main program for `GPGCloud` tool.
 """
 
 import argparse
+from operator import itemgetter
 from config import Config, ConfigError
-from data import list_aws, File
+from data import AwsData
 import sys
+import time
+
 
 def error_exit(message):
     """
@@ -36,6 +39,9 @@ def parse_args():
         '-c', '--config', type=str,
         help="configuration file for GPGCloud",
         default="~/.gpgcloud/gpgcloud.conf")
+    parser.add_argument(
+        '-v', '--verbose', help="show more verbose information",
+        action="store_true")
     parser.add_argument(
         '-V', '--version', help="show version", action="store_true")
     parser.add_argument(
@@ -69,6 +75,8 @@ def main():
     except ConfigError as e:
         error_exit(str(e))
 
+    aws_data = AwsData(config=config)
+
     input_file = None
     output_file = None
 
@@ -78,45 +86,60 @@ def main():
         output_file = args.outputfile
 
     if args.command == "list":
-        keys = list_aws(config=config)
-        print "Number of files in Amazon S3:", len(keys)
-        for key, metadata in keys.items():
-            print "{0} ({1}/{2})".format(
-                metadata["name"], metadata["data_size"],
-                metadata["encrypted_data_size"])
+        keys = aws_data.list()
+        if len(keys) == 0:
+            print "No files found in Amazon S3."
+            sys.exit(0)
+
+        if not args.verbose:
+            print "{0:<8}{1:<7}{2:<7}{3:<10}{4:<21}{5}".format(
+                "Mode", "Uid", "Gid", "Size", "Date", "Path")
+            print "".join('-' for i in range(78))
+
+        for metadata in sorted(keys.values(), key=itemgetter('path')):
+            if args.verbose:
+                print ("Path: '{path}', Size: {size}, "
+                       "Encrypted size: {encrypted_size}, "
+                       "Mode: {mode:o}, Uid: {uid}, Gid: {gid}, "
+                       "Ctime: {ctime}, Mtime: {mtime}, Atime: {atime}, "
+                       "Checksum: {checksum}".format(**metadata))
+            else:
+                mtime = time.strftime(
+                    '%Y-%m-%d %H:%M:%S',
+                    time.localtime(metadata["mtime"]))
+                metadata["mtime"] = mtime
+                print ("{mode:<8o}{uid:<7}{gid:<7}{encrypted_size:<10}"
+                       "{mtime:<21}{path}".format(**metadata))
 
     elif args.command == "store":
         if not input_file:
             error_exit("Local filename not given.")
         if not output_file:
             output_file = input_file
-        data_file = File(input_file, config=config)
         print "Storing file:", input_file, "->", output_file
-        data_file.store_aws(output_file)
+        aws_data.store_from_filename(input_file, output_file)
 
     elif args.command == "retrieve":
         if not input_file:
             error_exit("Cloud filename not given.")
         if not output_file:
             output_file = input_file
-        keys = list_aws(config=config)
+        keys = aws_data.list()
         for key, metadata in keys.items():
-            if metadata["name"] == input_file:
+            if metadata["path"] == input_file:
                 print "Retrieving file:", input_file, "->", output_file
-                data_file = File(output_file, config=config)
-                data_file.key = key
-                data_file.retrieve_aws()
+                aws_data.retrieve_to_filename(key, output_file)
+                sys.exit(0)
+        error_exit("File not found in cloud: " + input_file)
 
     elif args.command == "remove":
         if not input_file:
             error_exit("Cloud filename not given.")
-        keys = list_aws(config=config)
+        keys = aws_data.list()
         for key, metadata in keys.items():
-            if metadata["name"] == input_file:
+            if metadata["path"] == input_file:
                 print "Deleting file:", input_file
-                data_file = File(input_file, config=config)
-                data_file.key = key
-                data_file.delete_aws()
+                aws_data.delete(key)
 
 if __name__ == "__main__":
     main()

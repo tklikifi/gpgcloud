@@ -70,11 +70,11 @@ User stories
 
 The basic functionality of the tool is described as user stories.
 
-Backup one file to cloud
-------------------------
+Store one file to cloud
+-----------------------
 
 I, as the user of the tool, want to be able to store one file to cloud so
-that no information about where the data comes or what the data is is
+that no information about where the data comes from or what the data is is
 revealed to the cloud provider.
 
 The data must be identified only by the hash of the original data. The
@@ -92,23 +92,27 @@ It must be possible to see the metadata of the stored files, similar to `ls
 * original file name with absolute path
 * creation and modification timestamps of the original file
 * permissions of the original file
-* owner and group of the original file
-* file hash
+* uid and gid of the original file
+* size of the original file
+* size of the encrypted data stored to cloud
+* checksum of the original file
+* checksum of the encrypted data
 
-Restore one file from the cloud
--------------------------------
+Retrieve one file from the cloud
+--------------------------------
 
-I, as the user of the tool, want to be able to restore one file from cloud to
+I, as the user of the tool, want to be able to retrieve one file from cloud to
 local directory, either to original location or to a given location with a
-given a file name. The file hash is used as the key to files in cloud.
+given file name. The checksum of the original file is used as the key to
+file in cloud.
 
-Backup directory to cloud
--------------------------
+Store directory to cloud
+------------------------
 
 TBD.
 
-Restore directory from cloud
-----------------------------
+Retrieve directory from cloud
+-----------------------------
 
 TBD.
 
@@ -116,4 +120,4 @@ TBD.
 
 __author__ = "Tommi Linnakangas"
 __date__ = "2014-03-16"
-__version__ = "0.0.0"
+__version__ = "0.1.0"

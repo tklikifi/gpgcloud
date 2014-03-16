@@ -28,7 +28,7 @@ class Aws(object):
         if self.bucket is None:
             self.bucket = self.conn.create_bucket(bucket_name)
 
-    def store_data(self, key, data, metadata):
+    def store(self, key, data, metadata):
         """
         Store data to Amazon S3 cloud from data buffer.
         """
@@ -39,7 +39,7 @@ class Aws(object):
         m.key = key + "-metadata"
         m.set_contents_from_string(metadata)
 
-    def store_file(self, key, filename, metadata):
+    def store_from_filename(self, key, filename, metadata):
         """
         Store data to Amazon S3 cloud from file.
         """
@@ -62,7 +62,7 @@ class Aws(object):
         if m: metadata = m.get_contents_as_string()
         return data, metadata
 
-    def retrieve_file(self, key, filename):
+    def retrieve_to_filename(self, key, filename):
         """
         Retrieve data from Amazon S3 cloud. Write data to file, return
         metadata as string.
