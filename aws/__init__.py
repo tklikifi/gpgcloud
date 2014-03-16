@@ -6,7 +6,9 @@ import boto
 import boto.exception
 import boto.s3.key
 
-from utils import checksum_data, checksum_file
+
+class AwsError(Exception):
+    pass
 
 
 class Aws(object):
@@ -26,46 +28,50 @@ class Aws(object):
         if self.bucket is None:
             self.bucket = self.conn.create_bucket(bucket_name)
 
-    def store(self, data, metadata):
+    def store_data(self, key, data, metadata):
         """
         Store data to Amazon S3 cloud from data buffer.
         """
-        key = checksum_data(data)
         k = boto.s3.key.Key(self.bucket)
         k.key = key
-        k.set_metadata('metadata', metadata)
         k.set_contents_from_string(data)
-        return key
+        m = boto.s3.key.Key(self.bucket)
+        m.key = key + "-metadata"
+        m.set_contents_from_string(metadata)
 
-    def store_from_filename(self, filename, metadata):
+    def store_file(self, key, filename, metadata):
         """
-        Store data to Amazon S3 cloud from data buffer.
+        Store data to Amazon S3 cloud from file.
         """
-        key = checksum_file(filename)
         k = boto.s3.key.Key(self.bucket)
         k.key = key
-        k.set_metadata('metadata', metadata)
         k.set_contents_from_filename(filename)
-        return key
+        m = boto.s3.key.Key(self.bucket)
+        m.key = key + "-metadata"
+        m.set_contents_from_string(metadata)
 
     def retrieve(self, key):
         """
         Retrieve data from Amazon S3 cloud. Return data and metadata as
         strings.
         """
+        data = metadata = None
         k = self.bucket.get_key(key)
-        data = k.get_contents_as_string()
-        metadata = k.get_metadata('metadata')
+        if k: data = k.get_contents_as_string()
+        m = self.bucket.get_key(key + "-metadata")
+        if m: metadata = m.get_contents_as_string()
         return data, metadata
 
-    def retrieve_to_filename(self, key, filename):
+    def retrieve_file(self, key, filename):
         """
         Retrieve data from Amazon S3 cloud. Write data to file, return
         metadata as string.
         """
+        metadata = None
         k = self.bucket.get_key(key)
-        k.get_contents_to_filename(filename)
-        metadata = k.get_metadata('metadata')
+        if k: k.get_contents_to_filename(filename)
+        m = self.bucket.get_key(key + "-metadata")
+        if m: metadata = m.get_contents_as_string()
         return metadata
 
     def delete(self, key):
@@ -73,7 +79,9 @@ class Aws(object):
         Delete data from Amazon S3 cloud.
         """
         k = self.bucket.get_key(key)
-        k.delete()
+        if k: k.delete()
+        m = self.bucket.get_key(key + "-metadata")
+        if m: m.delete()
 
     def list(self):
         """
@@ -83,7 +91,7 @@ class Aws(object):
         keys = dict()
 
         for key in self.bucket.list():
-            k = self.bucket.get_key(key.name)
-            keys[key.name] = k.get_metadata('metadata')
+            m = self.bucket.get_key(key.name + "-metadata")
+            if m: keys[key.name] = m.get_contents_as_string()
 
         return keys
