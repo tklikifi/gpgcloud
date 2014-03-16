@@ -40,6 +40,13 @@ def parse_args():
         help="configuration file for GPGCloud",
         default="~/.gpgcloud/gpgcloud.conf")
     parser.add_argument(
+        '-k', '--key', type=str, help="key to file in cloud", default=None)
+    parser.add_argument(
+        '-s', '--sign',
+        help="sign encrypted file before they are stored to cloud",
+        action="store_true",
+        default=False)
+    parser.add_argument(
         '-v', '--verbose', help="show more verbose information",
         action="store_true")
     parser.add_argument(
@@ -117,13 +124,16 @@ def main():
         if not output_file:
             output_file = input_file
         print "Storing file:", input_file, "->", output_file
-        aws_data.store_from_filename(input_file, output_file)
+        aws_data.store_from_filename(input_file, output_file, args.sign)
 
     elif args.command == "retrieve":
         if not input_file:
             error_exit("Cloud filename not given.")
         if not output_file:
             output_file = input_file
+        if args.key:
+            aws_data.retrieve_to_filename(args.key, output_file)
+            sys.exit(0)
         keys = aws_data.list()
         for key, metadata in keys.items():
             if metadata["path"] == input_file:

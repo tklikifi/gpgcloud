@@ -37,20 +37,40 @@ class AwsData(object):
 
         for key, encrypted_metadata in self.aws.list().items():
             metadata_str = str(gpg.decrypt(encrypted_metadata))
-            metadata = json.loads(metadata_str)
+            if metadata_str:
+                metadata = json.loads(metadata_str)
+            else:
+                metadata = {
+                    "path": "UNKNOWN",
+                    "size": 0,
+                    "mode": 0,
+                    "uid": 0,
+                    "gid": 0,
+                    "atime": 0,
+                    "mtime": 0,
+                    "ctime": 0,
+                    "checksum": key,
+                    "encrypted_size": 0,
+                    "encrypted_checksum": "UNKNOWN",
+                    }
             keys[key] = metadata
 
         return keys
 
 
-    def store(self, data, filename, stat_info=None):
+    def store(self, data, filename, stat_info=None, sign=False):
         """
         Encrypt file data and metadata and store them to Amazon S3 cloud.
         """
         checksum = checksum_data(data)
         encoded_data = base64.encodestring(data)
         recipient = self.config.config.get("gnupg", "identity")
-        encrypted_data = str(gpg.encrypt(encoded_data, [recipient]))
+        if sign is True:
+            sign = recipient
+        else:
+            sign = None
+        encrypted_data = str(gpg.encrypt(
+            encoded_data, [recipient], sign=sign))
         metadata = {
             "path": filename,
             "size": len(data),
@@ -65,19 +85,18 @@ class AwsData(object):
             "encrypted_checksum": checksum_data(encrypted_data),
             }
         encrypted_metadata = str(gpg.encrypt(
-            json.dumps(metadata), [recipient], symmetric="AES256",
-            sign=recipient))
+            json.dumps(metadata), [recipient], sign=sign))
         self.aws.store(checksum, encrypted_data, encrypted_metadata)
         return checksum
 
-    def store_from_filename(self, filename, cloud_filename=None):
+    def store_from_filename(self, filename, cloud_filename=None, sign=False):
         """
         Encrypt file data and store it to Amazon S3 cloud.
         """
         if cloud_filename is None:
             cloud_filename = filename
         data = file(filename, "rb").read()
-        return self.store(data, cloud_filename, os.stat(filename))
+        return self.store(data, cloud_filename, os.stat(filename), sign=sign)
 
     def retrieve(self, key):
         """
@@ -89,9 +108,12 @@ class AwsData(object):
         data = base64.decodestring(encoded_data)
         checksum = checksum_data(data)
         metadata_str = str(gpg.decrypt(encrypted_metadata))
-        metadata = json.loads(metadata_str)
-        assert(encrypted_checksum == metadata['encrypted_checksum'])
-        assert(checksum == metadata['checksum'])
+        if metadata_str:
+            metadata = json.loads(metadata_str)
+            assert(encrypted_checksum == metadata['encrypted_checksum'])
+            assert(checksum == metadata['checksum'])
+        else:
+            metadata = None
         return data, metadata
 
     def retrieve_to_filename(self, key, filename=None):
@@ -100,7 +122,10 @@ class AwsData(object):
         """
         data, metadata = self.retrieve(key)
         if filename is None:
-            filename = metadata["path"]
+            if metadata is None:
+                filename = "UNKNOWN"
+            else:
+                filename = metadata["path"]
         directory_name = os.path.dirname(filename)
         if directory_name:
             try:
@@ -109,8 +134,9 @@ class AwsData(object):
                 if e.errno != errno.EEXIST:
                     raise
         file(filename, "wb").write(data)
-        os.chmod(filename, metadata["mode"])
-        os.utime(filename, (metadata["atime"], metadata["mtime"]))
+        if metadata is not None:
+            os.chmod(filename, metadata["mode"])
+            os.utime(filename, (metadata["atime"], metadata["mtime"]))
         return metadata
 
     def delete(self, key):
