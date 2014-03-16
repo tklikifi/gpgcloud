@@ -65,7 +65,8 @@ class AwsData(object):
             "encrypted_checksum": checksum_data(encrypted_data),
             }
         encrypted_metadata = str(gpg.encrypt(
-            json.dumps(metadata), [recipient]))
+            json.dumps(metadata), [recipient], symmetric="AES256",
+            sign=recipient))
         self.aws.store(checksum, encrypted_data, encrypted_metadata)
         return checksum
 
