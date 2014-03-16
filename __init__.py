@@ -1,7 +1,7 @@
 """
 Utility to store GPG encrypted data into Amazon S3 cloud.
 
-`gpgcloud` is a simple tool to store encrypted data into Amazon S3 cloud.
+GPGCloud is a simple tool to store encrypted data into Amazon S3 cloud.
 The main focus of the tool is to use secure storage in the cloud: all data
 is encrypted and no information about what kind of data is stored is revealed
 to cloud provider.
