@@ -1,8 +1,10 @@
 """
-Handle data encryption and decryption.
+Handle data encryption and decryption while transferring the file to and
+from the cloud.
 """
 
 import base64
+import errno
 import gnupg
 import json
 import os
@@ -43,7 +45,7 @@ class AwsData(object):
 
     def store(self, data, filename, stat_info=None):
         """
-        Encrypt file data and store it to Amazon S3 cloud.
+        Encrypt file data and metadata and store them to Amazon S3 cloud.
         """
         checksum = checksum_data(data)
         encoded_data = base64.encodestring(data)
@@ -100,8 +102,14 @@ class AwsData(object):
             filename = metadata["path"]
         directory_name = os.path.dirname(filename)
         if directory_name:
-            os.makedirs(directory_name)
+            try:
+                os.makedirs(directory_name)
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise
         file(filename, "wb").write(data)
+        os.chmod(filename, metadata["mode"])
+        os.utime(filename, (metadata["atime"], metadata["mtime"]))
         return metadata
 
     def delete(self, key):
