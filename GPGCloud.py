@@ -88,7 +88,7 @@ def main():
     if args.command == "list":
         keys = aws_data.list()
         if len(keys) == 0:
-            print "No files found in Amazon S3."
+            print "No files found in Amazon S3 cloud."
             sys.exit(0)
 
         if not args.verbose:
@@ -130,7 +130,7 @@ def main():
                 print "Retrieving file:", input_file, "->", output_file
                 aws_data.retrieve_to_filename(key, output_file)
                 sys.exit(0)
-        error_exit("File not found in cloud: " + input_file)
+        error_exit("File not found in Amazon S3 cloud: " + input_file)
 
     elif args.command == "remove":
         if not input_file:

@@ -13,7 +13,7 @@ class TestUtils(unittest.TestCase):
     def setUp(self):
         pass
 
-    def test_random_string(self):
+    def test_utils_random_string(self):
         """
         Test random string creation.
         """
@@ -24,7 +24,7 @@ class TestUtils(unittest.TestCase):
             self.assertEqual(len(random_2), length)
             self.assertNotEqual(random_1, random_2)
 
-    def test_checksum(self):
+    def test_utils_checksum(self):
         """
         Test checksum functions.
         """
@@ -54,7 +54,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(config.config.get("aws", "secret_access_key"), "")
         os.remove("test_config.conf")
 
-    def test_config(self):
+    def test_config_ok_config(self):
         """
         Test configuration handling with config file.
         """
@@ -109,7 +109,7 @@ class TestAws(unittest.TestCase):
     def setUp(self):
         pass
 
-    def test_store_data(self):
+    def test_aws_store_data(self):
         c = Config()
         aws = Aws(c.config.get("aws", "access_key"),
                   c.config.get("aws", "secret_access_key"),
@@ -132,7 +132,7 @@ class TestAws(unittest.TestCase):
         for key, metadata in keys.items():
             aws.delete(key)
 
-    def test_store_file(self):
+    def test_aws_store_filename(self):
         c = Config()
         aws = Aws(c.config.get("aws", "access_key"),
                   c.config.get("aws", "secret_access_key"),
@@ -145,7 +145,7 @@ class TestAws(unittest.TestCase):
         self.assertEqual("LICENSE METADATA", metadata)
         aws.delete(key)
 
-    def test_delete_all_keys(self):
+    def test_aws_delete_all_keys(self):
         c = Config()
         aws = Aws(c.config.get("aws", "access_key"),
                   c.config.get("aws", "secret_access_key"),
@@ -158,7 +158,7 @@ class TestData(unittest.TestCase):
     def setUp(self):
         pass
 
-    def test_store_data(self):
+    def test_data_store_data(self):
         c = Config()
         aws_data = AwsData(config=c)
         data1 = file("testdata/data1.txt").read()
@@ -179,7 +179,7 @@ class TestData(unittest.TestCase):
         aws_data.delete(key1)
         aws_data.delete(key2)
 
-    def test_store_filename(self):
+    def test_data_store_filename(self):
         c = Config()
         aws_data = AwsData(config=c)
         data1 = file("testdata/data1.txt").read()
