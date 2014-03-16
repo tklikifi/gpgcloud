@@ -179,13 +179,13 @@ class TestData(unittest.TestCase):
         aws_data.delete(key1)
         aws_data.delete(key2)
 
-    def test_data_store_filename(self):
+    def _test_data_store_filename(self, sign=False):
         c = Config()
         aws_data = AwsData(config=c)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
-        key1 = aws_data.store_from_filename("testdata/data1.txt")
-        key2 = aws_data.store_from_filename("testdata/data2.txt")
+        key1 = aws_data.store_from_filename("testdata/data1.txt", sign=sign)
+        key2 = aws_data.store_from_filename("testdata/data2.txt", sign=sign)
         for key, metadata in aws_data.list().items():
             print metadata
             if key == key1:
@@ -204,6 +204,12 @@ class TestData(unittest.TestCase):
         aws_data.delete(key2)
         os.remove("testdata/new_data1.txt")
         os.remove("testdata/new_data2.txt")
+
+    def test_data_store_filename(self):
+        self._test_data_store_filename(sign=False)
+
+    def test_data_store_filename_sign(self):
+        self._test_data_store_filename(sign=True)
 
 
 if __name__ == "__main__":

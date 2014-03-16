@@ -69,8 +69,7 @@ class AwsData(object):
             sign = recipient
         else:
             sign = None
-        encrypted_data = str(gpg.encrypt(
-            encoded_data, [recipient], sign=sign))
+        encrypted_data = gpg.encrypt(encoded_data, [recipient], sign=sign)
         metadata = {
             "path": filename,
             "size": len(data),
@@ -81,12 +80,12 @@ class AwsData(object):
             "mtime": 0 if stat_info is None else stat_info.st_mtime,
             "ctime": 0 if stat_info is None else stat_info.st_ctime,
             "checksum": checksum,
-            "encrypted_size": len(encrypted_data),
-            "encrypted_checksum": checksum_data(encrypted_data),
+            "encrypted_size": len(encrypted_data.data),
+            "encrypted_checksum": checksum_data(encrypted_data.data),
             }
-        encrypted_metadata = str(gpg.encrypt(
-            json.dumps(metadata), [recipient], sign=sign))
-        self.aws.store(checksum, encrypted_data, encrypted_metadata)
+        encrypted_metadata = gpg.encrypt(
+            json.dumps(metadata), [recipient], sign=sign)
+        self.aws.store(checksum, encrypted_data.data, encrypted_metadata.data)
         return checksum
 
     def store_from_filename(self, filename, cloud_filename=None, sign=False):
@@ -107,9 +106,9 @@ class AwsData(object):
         encoded_data = str(gpg.decrypt(encrypted_data))
         data = base64.decodestring(encoded_data)
         checksum = checksum_data(data)
-        metadata_str = str(gpg.decrypt(encrypted_metadata))
-        if metadata_str:
-            metadata = json.loads(metadata_str)
+        metadata = gpg.decrypt(encrypted_metadata)
+        if metadata.data:
+            metadata = json.loads(metadata.data)
             assert(encrypted_checksum == metadata['encrypted_checksum'])
             assert(checksum == metadata['checksum'])
         else:
