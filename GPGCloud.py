@@ -99,8 +99,8 @@ def main():
             sys.exit(0)
 
         if not args.verbose:
-            print "{0:<8}{1:<7}{2:<7}{3:<10}{4:<21}{5}".format(
-                "Mode", "Uid", "Gid", "Size", "Date", "Path")
+            print "{0:<8}{1:<7}{2:<7}{3:<10}{4:<21}{5:<12}{6}".format(
+                "Mode", "Uid", "Gid", "Size", "Date", "Checksum", "Path")
             print "".join('-' for i in range(78))
 
         for metadata in sorted(keys.values(), key=itemgetter('path')):
@@ -115,8 +115,9 @@ def main():
                     '%Y-%m-%d %H:%M:%S',
                     time.localtime(metadata["mtime"]))
                 metadata["mtime"] = mtime
+                metadata["checksum"] = metadata["checksum"][-10:]
                 print ("{mode:<8o}{uid:<7}{gid:<7}{encrypted_size:<10}"
-                       "{mtime:<21}{path}".format(**metadata))
+                       "{mtime:<21}{checksum:<12}{path}".format(**metadata))
 
     elif args.command == "store":
         if not input_file:

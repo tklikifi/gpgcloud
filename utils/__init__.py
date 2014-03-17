@@ -23,7 +23,7 @@ def checksum_data(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def checksum_stream(f, block_size=2**20):
+def checksum_stream(f, extra_data=None, block_size=2**20):
     """
     Calculate SHA-256 checksum for opened data stream.
     """
@@ -33,11 +33,14 @@ def checksum_stream(f, block_size=2**20):
         if not data:
             break
         sha256.update(data)
+    if extra_data is not None:
+        sha256.update(extra_data)
     return sha256.hexdigest()
 
 
-def checksum_file(filename, block_size=2**20):
+def checksum_file(filename, extra_data=None, block_size=2**20):
     """
     Calculate SHA-256 checksum for given file.
     """
-    return checksum_stream(file(filename), block_size=block_size)
+    return checksum_stream(
+        file(filename), extra_data=extra_data, block_size=block_size)

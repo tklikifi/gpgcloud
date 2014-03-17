@@ -30,13 +30,13 @@ class AwsData(object):
                        self.config.config.get("aws", "secret_access_key"),
                        self.config.config.get("aws", "bucket"))
 
-    def _create_metadata(self, filename=None, size=0, stat_info=None,
+    def _create_metadata(self, key, filename=None, size=0, stat_info=None,
                          checksum=None, encrypted_size=0,
                          encrypted_checksum=None):
         metadata = dict(
-            version=METADATA_VERSION, path="UNKNOWN", size=size, mode=0,
-            uid=0, gid=0, atime=0, mtime=0, ctime=0, checksum="UNKNOWN",
-            encrypted_size=encrypted_size, encrypted_checksum="UNKNOWN")
+            version=METADATA_VERSION, key=key, path="UNKNOWN", size=size,
+            mode=0, uid=0, gid=0, atime=0, mtime=0, ctime=0, checksum=None,
+            encrypted_size=encrypted_size, encrypted_checksum=None)
         if filename is not None:
             metadata["path"] = filename
         if stat_info is not None:
@@ -66,7 +66,7 @@ class AwsData(object):
                     raise ValueError("File metadata is invalid")
                 assert(metadata["version"] == METADATA_VERSION)
             else:
-                metadata = self._create_metadata(checksum=key)
+                metadata = self._create_metadata(key)
             keys[key] = metadata
 
         return keys
@@ -76,6 +76,7 @@ class AwsData(object):
         """
         Encrypt file data and metadata and store them to Amazon S3 cloud.
         """
+        key = checksum_data(data + filename)
         checksum = checksum_data(data)
         encoded_data = base64.encodestring(data)
         recipient = self.config.config.get("gnupg", "identity")
@@ -85,13 +86,13 @@ class AwsData(object):
             sign = None
         encrypted_data = gpg.encrypt(encoded_data, [recipient], sign=sign)
         metadata = self._create_metadata(
-            filename=filename, size=len(data), stat_info=stat_info,
+            key, filename=filename, size=len(data), stat_info=stat_info,
             checksum=checksum, encrypted_size=len(encrypted_data.data),
             encrypted_checksum=checksum_data(encrypted_data.data))
         encrypted_metadata = gpg.encrypt(
             json.dumps(metadata), [recipient], sign=sign)
-        self.aws.store(checksum, encrypted_data.data, encrypted_metadata.data)
-        return checksum
+        self.aws.store(key, encrypted_data.data, encrypted_metadata.data)
+        return key
 
     def store_from_filename(self, filename, cloud_filename=None, sign=False):
         """
