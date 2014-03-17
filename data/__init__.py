@@ -14,6 +14,7 @@ from config import Config
 from utils import checksum_data
 
 
+METADATA_VERSION = 1
 gpg = gnupg.GPG(use_agent=True)
 
 
@@ -29,6 +30,28 @@ class AwsData(object):
                        self.config.config.get("aws", "secret_access_key"),
                        self.config.config.get("aws", "bucket"))
 
+    def _create_metadata(self, filename=None, size=0, stat_info=None,
+                         checksum=None, encrypted_size=0,
+                         encrypted_checksum=None):
+        metadata = dict(
+            version=METADATA_VERSION, path="UNKNOWN", size=size, mode=0,
+            uid=0, gid=0, atime=0, mtime=0, ctime=0, checksum="UNKNOWN",
+            encrypted_size=encrypted_size, encrypted_checksum="UNKNOWN")
+        if filename is not None:
+            metadata["path"] = filename
+        if stat_info is not None:
+            metadata["mode"] = stat_info.st_mode
+            metadata["uid"] = stat_info.st_uid
+            metadata["gid"] = stat_info.st_gid
+            metadata["atime"] = stat_info.st_atime
+            metadata["ctime"] = stat_info.st_ctime
+            metadata["mtime"] = stat_info.st_mtime
+        if checksum is not None:
+            metadata["checksum"] = checksum
+        if encrypted_checksum is not None:
+            metadata["encrypted_checksum"] = encrypted_checksum
+        return metadata
+
     def list(self):
         """
         List keys from Amazon S3 cloud and decrypt metadata.
@@ -36,23 +59,14 @@ class AwsData(object):
         keys = dict()
 
         for key, encrypted_metadata in self.aws.list().items():
-            metadata_str = str(gpg.decrypt(encrypted_metadata))
-            if metadata_str:
-                metadata = json.loads(metadata_str)
+            metadata_str = gpg.decrypt(encrypted_metadata)
+            if metadata_str.data:
+                metadata = json.loads(metadata_str.data)
+                if "version" not in metadata:
+                    raise ValueError("File metadata is invalid")
+                assert(metadata["version"] == METADATA_VERSION)
             else:
-                metadata = {
-                    "path": "UNKNOWN",
-                    "size": 0,
-                    "mode": 0,
-                    "uid": 0,
-                    "gid": 0,
-                    "atime": 0,
-                    "mtime": 0,
-                    "ctime": 0,
-                    "checksum": key,
-                    "encrypted_size": 0,
-                    "encrypted_checksum": "UNKNOWN",
-                    }
+                metadata = self._create_metadata(checksum=key)
             keys[key] = metadata
 
         return keys
@@ -70,19 +84,10 @@ class AwsData(object):
         else:
             sign = None
         encrypted_data = gpg.encrypt(encoded_data, [recipient], sign=sign)
-        metadata = {
-            "path": filename,
-            "size": len(data),
-            "mode": 0 if stat_info is None else stat_info.st_mode,
-            "uid": 0 if stat_info is None else stat_info.st_uid,
-            "gid": 0 if stat_info is None else stat_info.st_gid,
-            "atime": 0 if stat_info is None else stat_info.st_atime,
-            "mtime": 0 if stat_info is None else stat_info.st_mtime,
-            "ctime": 0 if stat_info is None else stat_info.st_ctime,
-            "checksum": checksum,
-            "encrypted_size": len(encrypted_data.data),
-            "encrypted_checksum": checksum_data(encrypted_data.data),
-            }
+        metadata = self._create_metadata(
+            filename=filename, size=len(data), stat_info=stat_info,
+            checksum=checksum, encrypted_size=len(encrypted_data.data),
+            encrypted_checksum=checksum_data(encrypted_data.data))
         encrypted_metadata = gpg.encrypt(
             json.dumps(metadata), [recipient], sign=sign)
         self.aws.store(checksum, encrypted_data.data, encrypted_metadata.data)
@@ -103,12 +108,15 @@ class AwsData(object):
         """
         encrypted_data, encrypted_metadata = self.aws.retrieve(key)
         encrypted_checksum = checksum_data(encrypted_data)
-        encoded_data = str(gpg.decrypt(encrypted_data))
-        data = base64.decodestring(encoded_data)
+        encoded_data = gpg.decrypt(encrypted_data)
+        data = base64.decodestring(encoded_data.data)
         checksum = checksum_data(data)
         metadata = gpg.decrypt(encrypted_metadata)
         if metadata.data:
             metadata = json.loads(metadata.data)
+            if "version" not in metadata:
+                raise ValueError("File metadata is invalid")
+            assert(metadata["version"] == METADATA_VERSION)
             assert(encrypted_checksum == metadata['encrypted_checksum'])
             assert(checksum == metadata['checksum'])
         else:
