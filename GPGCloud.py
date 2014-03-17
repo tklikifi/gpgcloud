@@ -5,8 +5,9 @@ Main program for `GPGCloud` tool.
 
 import argparse
 from operator import itemgetter
+from aws import Aws
 from config import Config, ConfigError
-from data import AwsData
+from cloud import Cloud
 import sys
 import time
 
@@ -33,19 +34,14 @@ def parse_args():
     Parse command line arguments.
     """
     parser = argparse.ArgumentParser(
-        description="store and retrieve GPG encypted data to and from Amazon "
-                    "S3 cloud service")
+        description="store and retrieve GPG encrypted data to and from "
+                    "cloud service")
     parser.add_argument(
         '-c', '--config', type=str,
         help="configuration file for GPGCloud",
         default="~/.gpgcloud/gpgcloud.conf")
     parser.add_argument(
         '-k', '--key', type=str, help="key to file in cloud", default=None)
-    parser.add_argument(
-        '-s', '--sign',
-        help="sign encrypted file before they are stored to cloud",
-        action="store_true",
-        default=False)
     parser.add_argument(
         '-v', '--verbose', help="show more verbose information",
         action="store_true")
@@ -82,7 +78,7 @@ def main():
     except ConfigError as e:
         error_exit(str(e))
 
-    aws_data = AwsData(config=config)
+    cloud = Cloud(config=config, cloud_provider=Aws)
 
     input_file = None
     output_file = None
@@ -93,9 +89,9 @@ def main():
         output_file = args.outputfile
 
     if args.command == "list":
-        keys = aws_data.list()
+        keys = cloud.list()
         if len(keys) == 0:
-            print "No files found in Amazon S3 cloud."
+            print "No files found in cloud."
             sys.exit(0)
 
         if not args.verbose:
@@ -125,7 +121,7 @@ def main():
         if not output_file:
             output_file = input_file
         print "Storing file:", input_file, "->", output_file
-        aws_data.store_from_filename(input_file, output_file, args.sign)
+        cloud.store_from_filename(input_file, output_file)
 
     elif args.command == "retrieve":
         if not input_file:
@@ -133,24 +129,24 @@ def main():
         if not output_file:
             output_file = input_file
         if args.key:
-            aws_data.retrieve_to_filename(args.key, output_file)
+            cloud.retrieve_to_filename(args.key, output_file)
             sys.exit(0)
-        keys = aws_data.list()
+        keys = cloud.list()
         for key, metadata in keys.items():
             if metadata["path"] == input_file:
                 print "Retrieving file:", input_file, "->", output_file
-                aws_data.retrieve_to_filename(key, output_file)
+                cloud.retrieve_to_filename(key, output_file)
                 sys.exit(0)
-        error_exit("File not found in Amazon S3 cloud: " + input_file)
+        error_exit("File not found in cloud: " + input_file)
 
     elif args.command == "remove":
         if not input_file:
             error_exit("Cloud filename not given.")
-        keys = aws_data.list()
+        keys = cloud.list()
         for key, metadata in keys.items():
             if metadata["path"] == input_file:
                 print "Deleting file:", input_file
-                aws_data.delete(key)
+                cloud.delete(key)
 
 if __name__ == "__main__":
     main()

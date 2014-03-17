@@ -1,9 +1,9 @@
-import data
+import cloud
 import os
 import tempfile
 import unittest
 from aws import Aws
-from data import AwsData
+from cloud import Cloud
 from config import Config, ConfigError
 from utils import random_string, checksum_file, checksum_data
 
@@ -49,7 +49,8 @@ class TestConfig(unittest.TestCase):
         config = Config("test_config.conf")
         self.assertIn("gnupg", config.config.sections())
         self.assertIn("aws", config.config.sections())
-        self.assertEqual(config.config.get("gnupg", "identity"), "")
+        self.assertEqual(config.config.get("gnupg", "recipients"), "")
+        self.assertEqual(config.config.get("gnupg", "signer"), "")
         self.assertEqual(config.config.get("aws", "access_key"), "")
         self.assertEqual(config.config.get("aws", "secret_access_key"), "")
         os.remove("test_config.conf")
@@ -59,7 +60,8 @@ class TestConfig(unittest.TestCase):
         Test configuration handling with config file.
         """
         test_data = ("[gnupg]\n"
-                     "identity = tkl@iki.fi\n"
+                     "recipients = tkl@iki.fi\n"
+                     "signer = tommi.linnakangas@iki.fi\n"
                      "\n"
                      "[aws]\n"
                      "access_key = ACCESSKEY\n"
@@ -71,7 +73,10 @@ class TestConfig(unittest.TestCase):
         config = Config("test_config.conf")
         self.assertIn("gnupg", config.config.sections())
         self.assertIn("aws", config.config.sections())
-        self.assertEqual(config.config.get("gnupg", "identity"), "tkl@iki.fi")
+        self.assertEqual(config.config.get(
+            "gnupg", "recipients"), "tkl@iki.fi")
+        self.assertEqual(config.config.get(
+            "gnupg", "signer"), "tommi.linnakangas@iki.fi")
         self.assertEqual(config.config.get("aws", "access_key"), "ACCESSKEY")
         self.assertEqual(config.config.get(
             "aws", "secret_access_key"), "SECRETACCESSKEY")
@@ -84,13 +89,15 @@ class TestConfig(unittest.TestCase):
         Test configuration handling with config file with wrong config.
         """
         test_data_1 = ("[gnupg_missing]\n"
-                       "identity = tkl@iki.fi\n"
+                       "recipients = tkl@iki.fi\n"
+                       "signer = tkl@iki.fi\n"
                        "[aws]\n"
                        "access_key = ACCESSKEY\n"
                        "secret_access_key = SECRETACCESSKEY\n"
                        "bucket = BUCKET\n")
         test_data_2 = ("[gnupg]\n"
-                       "identity_missing = tkl@iki.fi\n"
+                       "recipients_missing = tkl@iki.fi\n"
+                       "signer = tkl@iki.fi\n"
                        "[aws]\n"
                        "access_key = ACCESSKEY\n"
                        "secret_access_key = SECRETACCESSKEY\n"
@@ -153,63 +160,57 @@ class TestAws(unittest.TestCase):
         for key, metadata in aws.list().items():
             aws.delete(key)
 
-class TestData(unittest.TestCase):
+class TestCloud(unittest.TestCase):
 
     def setUp(self):
         pass
 
-    def test_data_store_data(self):
+    def test_cloud_store_data(self):
         c = Config()
-        aws_data = AwsData(config=c)
+        cloud = Cloud(config=c, cloud_provider=Aws)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
-        key1 = aws_data.store(data1, "testdata/data1.txt")
-        key2 = aws_data.store(data2, "testdata/data2.txt")
-        for key, metadata in aws_data.list().items():
+        key1 = cloud.store(data1, "testdata/data1.txt")
+        key2 = cloud.store(data2, "testdata/data2.txt")
+        for key, metadata in cloud.list().items():
             if key == key1:
                 self.assertEqual("testdata/data1.txt", metadata["path"])
             if key == key2:
                 self.assertEqual("testdata/data2.txt", metadata["path"])
-        new_data1, new_metadata_1 = aws_data.retrieve(key1)
-        new_data2, new_metadata_2 = aws_data.retrieve(key2)
+        new_data1, new_metadata_1 = cloud.retrieve(key1)
+        new_data2, new_metadata_2 = cloud.retrieve(key2)
         self.assertEqual(data1, new_data1)
         self.assertEqual("testdata/data1.txt", new_metadata_1["path"])
         self.assertEqual(data2, new_data2)
         self.assertEqual("testdata/data2.txt", new_metadata_2["path"])
-        aws_data.delete(key1)
-        aws_data.delete(key2)
+        cloud.delete(key1)
+        cloud.delete(key2)
 
-    def _test_data_store_filename(self, sign=False):
+    def test_cloud_store_filename(self):
         c = Config()
-        aws_data = AwsData(config=c)
+        cloud = Cloud(config=c)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
-        key1 = aws_data.store_from_filename("testdata/data1.txt", sign=sign)
-        key2 = aws_data.store_from_filename("testdata/data2.txt", sign=sign)
-        for key, metadata in aws_data.list().items():
+        key1 = cloud.store_from_filename("testdata/data1.txt")
+        key2 = cloud.store_from_filename("testdata/data2.txt")
+        for key, metadata in cloud.list().items():
             print metadata
             if key == key1:
                 self.assertEqual("testdata/data1.txt", metadata["path"])
             if key == key2:
                 self.assertEqual("testdata/data2.txt", metadata["path"])
-        new_metadata_1 = aws_data.retrieve_to_filename(
+        new_metadata_1 = cloud.retrieve_to_filename(
             key1, "testdata/new_data1.txt")
-        new_metadata_2 = aws_data.retrieve_to_filename(
+        new_metadata_2 = cloud.retrieve_to_filename(
             key2, "testdata/new_data2.txt")
         self.assertEqual(data1, file("testdata/new_data1.txt").read())
         self.assertEqual("testdata/data1.txt", new_metadata_1["path"])
         self.assertEqual(data2, file("testdata/new_data2.txt").read())
         self.assertEqual("testdata/data2.txt", new_metadata_2["path"])
-        aws_data.delete(key1)
-        aws_data.delete(key2)
+        cloud.delete(key1)
+        cloud.delete(key2)
         os.remove("testdata/new_data1.txt")
         os.remove("testdata/new_data2.txt")
-
-    def test_data_store_filename(self):
-        self._test_data_store_filename(sign=False)
-
-    def test_data_store_filename_sign(self):
-        self._test_data_store_filename(sign=True)
 
 
 if __name__ == "__main__":

@@ -18,17 +18,23 @@ METADATA_VERSION = 1
 gpg = gnupg.GPG(use_agent=True)
 
 
-class AwsData(object):
-
-    def __init__(self, config=None):
+class Cloud(object):
+    """
+    Basic class for cloud providers.
+    """
+    def __init__(self, config=None, cloud_provider=Aws):
         if config is None:
             self.config = Config()
         else:
             self.config = config
 
-        self.aws = Aws(self.config.config.get("aws", "access_key"),
-                       self.config.config.get("aws", "secret_access_key"),
-                       self.config.config.get("aws", "bucket"))
+        if cloud_provider == Aws:
+            self.cloud = Aws(
+                self.config.config.get("aws", "access_key"),
+                self.config.config.get("aws", "secret_access_key"),
+                self.config.config.get("aws", "bucket"))
+        else:
+            raise ValueError("Unsupported cloud provider")
 
     def _create_metadata(self, key, filename=None, size=0, stat_info=None,
                          checksum=None, encrypted_size=0,
@@ -54,11 +60,11 @@ class AwsData(object):
 
     def list(self):
         """
-        List keys from Amazon S3 cloud and decrypt metadata.
+        List keys from cloud and decrypt metadata.
         """
         keys = dict()
 
-        for key, encrypted_metadata in self.aws.list().items():
+        for key, encrypted_metadata in self.cloud.list().items():
             metadata_str = gpg.decrypt(encrypted_metadata)
             if metadata_str.data:
                 metadata = json.loads(metadata_str.data)
@@ -72,42 +78,39 @@ class AwsData(object):
         return keys
 
 
-    def store(self, data, filename, stat_info=None, sign=False):
+    def store(self, data, filename, stat_info=None):
         """
-        Encrypt file data and metadata and store them to Amazon S3 cloud.
+        Encrypt file data and metadata and store them to cloud.
         """
         key = checksum_data(data + filename)
         checksum = checksum_data(data)
         encoded_data = base64.encodestring(data)
-        recipient = self.config.config.get("gnupg", "identity")
-        if sign is True:
-            sign = recipient
-        else:
-            sign = None
-        encrypted_data = gpg.encrypt(encoded_data, [recipient], sign=sign)
+        recipients = self.config.config.get("gnupg", "recipients").split(",")
+        signer = self.config.config.get("gnupg", "signer")
+        encrypted_data = gpg.encrypt(encoded_data, recipients, sign=signer)
         metadata = self._create_metadata(
             key, filename=filename, size=len(data), stat_info=stat_info,
             checksum=checksum, encrypted_size=len(encrypted_data.data),
             encrypted_checksum=checksum_data(encrypted_data.data))
         encrypted_metadata = gpg.encrypt(
-            json.dumps(metadata), [recipient], sign=sign)
-        self.aws.store(key, encrypted_data.data, encrypted_metadata.data)
+            json.dumps(metadata), recipients, sign=signer)
+        self.cloud.store(key, encrypted_data.data, encrypted_metadata.data)
         return key
 
-    def store_from_filename(self, filename, cloud_filename=None, sign=False):
+    def store_from_filename(self, filename, cloud_filename=None):
         """
-        Encrypt file data and store it to Amazon S3 cloud.
+        Encrypt file data and store it to cloud.
         """
         if cloud_filename is None:
             cloud_filename = filename
         data = file(filename, "rb").read()
-        return self.store(data, cloud_filename, os.stat(filename), sign=sign)
+        return self.store(data, cloud_filename, os.stat(filename))
 
     def retrieve(self, key):
         """
-        Retrieve data from Amazon S3 cloud and decrypt it.
+        Retrieve data from cloud and decrypt it.
         """
-        encrypted_data, encrypted_metadata = self.aws.retrieve(key)
+        encrypted_data, encrypted_metadata = self.cloud.retrieve(key)
         encrypted_checksum = checksum_data(encrypted_data)
         encoded_data = gpg.decrypt(encrypted_data)
         data = base64.decodestring(encoded_data.data)
@@ -126,7 +129,7 @@ class AwsData(object):
 
     def retrieve_to_filename(self, key, filename=None):
         """
-        Retrieve data from Amazon S3 cloud and decrypt it.
+        Retrieve data from cloud and decrypt it.
         """
         data, metadata = self.retrieve(key)
         if filename is None:
@@ -149,6 +152,6 @@ class AwsData(object):
 
     def delete(self, key):
         """
-        Delete data from Amazon S3 cloud.
+        Delete data from cloud.
         """
-        self.aws.delete(key)
+        self.cloud.delete(key)
