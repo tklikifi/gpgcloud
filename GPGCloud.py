@@ -78,7 +78,13 @@ def main():
     except ConfigError as e:
         error_exit(str(e))
 
-    cloud = Cloud(config=config, cloud_provider=Aws)
+    # Initialize cloud provider.
+    aws_cloud = Aws(
+        config.config.get("aws", "access_key"),
+        config.config.get("aws", "secret_access_key"),
+        config.config.get("aws", "bucket"))
+
+    cloud = Cloud(config, aws_cloud)
 
     input_file = None
     output_file = None

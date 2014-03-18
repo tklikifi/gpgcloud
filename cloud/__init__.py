@@ -3,14 +3,11 @@ Handle data encryption and decryption while transferring the file to and
 from the cloud.
 """
 
-import base64
 import errno
 import gnupg
 import json
 import os
 
-from aws import Aws
-from config import Config
 from utils import checksum_data
 
 
@@ -20,21 +17,11 @@ gpg = gnupg.GPG(use_agent=True)
 
 class Cloud(object):
     """
-    Basic class for cloud providers.
+    Basic class for cloud access.
     """
-    def __init__(self, config=None, cloud_provider=Aws):
-        if config is None:
-            self.config = Config()
-        else:
-            self.config = config
-
-        if cloud_provider == Aws:
-            self.cloud = Aws(
-                self.config.config.get("aws", "access_key"),
-                self.config.config.get("aws", "secret_access_key"),
-                self.config.config.get("aws", "bucket"))
-        else:
-            raise ValueError("Unsupported cloud provider")
+    def __init__(self, config, cloud):
+        self.config = config
+        self.cloud = cloud
 
     def _create_metadata(self, key, filename=None, size=0, stat_info=None,
                          checksum=None, encrypted_size=0,

@@ -167,7 +167,10 @@ class TestCloud(unittest.TestCase):
 
     def test_cloud_store_data(self):
         c = Config()
-        cloud = Cloud(config=c, cloud_provider=Aws)
+        aws = Aws(c.config.get("aws", "access_key"),
+                  c.config.get("aws", "secret_access_key"),
+                  c.config.get("aws", "bucket"))
+        cloud = Cloud(c, aws)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         key1 = cloud.store(data1, "testdata/data1.txt")
@@ -188,7 +191,10 @@ class TestCloud(unittest.TestCase):
 
     def test_cloud_store_filename(self):
         c = Config()
-        cloud = Cloud(config=c)
+        aws = Aws(c.config.get("aws", "access_key"),
+                  c.config.get("aws", "secret_access_key"),
+                  c.config.get("aws", "bucket"))
+        cloud = Cloud(c, aws)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         key1 = cloud.store_from_filename("testdata/data1.txt")
