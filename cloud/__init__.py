@@ -9,7 +9,7 @@ import gnupg
 import json
 import os
 
-from config import ConfigError
+from ConfigParser import NoOptionError, NoSectionError
 from utils import checksum_data
 
 
@@ -30,7 +30,7 @@ class Cloud(object):
             self._db = dataset.connect(
                 'sqlite:///' + config.config.get("general", "database"))
             self._file_table = self._db["files"]
-        except ConfigError:
+        except (NoOptionError, NoSectionError):
             self._file_table = None
 
     def _create_metadata(self, key, filename=None, size=0, stat_info=None,
