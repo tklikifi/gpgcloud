@@ -3,11 +3,13 @@ Handle data encryption and decryption while transferring the file to and
 from the cloud.
 """
 
+import dataset
 import errno
 import gnupg
 import json
 import os
 
+from config import ConfigError
 from utils import checksum_data
 
 
@@ -23,13 +25,22 @@ class Cloud(object):
         self.config = config
         self.cloud = cloud
 
+        # Initialize internal file database if it is configured.
+        try:
+            self._db = dataset.connect(
+                'sqlite:///' + config.config.get("general", "database"))
+            self._file_table = self._db["files"]
+        except ConfigError:
+            self._file_table = None
+
     def _create_metadata(self, key, filename=None, size=0, stat_info=None,
                          checksum=None, encrypted_size=0,
                          encrypted_checksum=None):
         metadata = dict(
-            version=METADATA_VERSION, key=key, path="UNKNOWN", size=size,
-            mode=0, uid=0, gid=0, atime=0, mtime=0, ctime=0, checksum=None,
-            encrypted_size=encrypted_size, encrypted_checksum=None)
+            metadata_version=METADATA_VERSION, key=key, path="UNKNOWN",
+            size=size, mode=0, uid=0, gid=0, atime=0, mtime=0, ctime=0,
+            checksum=None, encrypted_size=encrypted_size,
+            encrypted_checksum=None)
         if filename is not None:
             metadata["path"] = filename
         if stat_info is not None:
@@ -45,25 +56,55 @@ class Cloud(object):
             metadata["encrypted_checksum"] = encrypted_checksum
         return metadata
 
-    def list(self):
+    def _file_db_drop_table(self):
+        """
+        Drop file database.
+        """
+        if self._file_table is not None:
+            self._file_table.drop()
+            self._file_table = self._db["files"]
+
+    def _file_db_update_entry(self, metadata):
+        """
+        Update file database with new or existing metadata.
+        """
+        if self._file_table is not None:
+            self._file_table.upsert(metadata, ["name", "key"])
+
+    def _file_db_delete_entry(self, key):
+        """
+        Delete key from file database.
+        """
+        if self._file_table is not None:
+            self._file_table.delete(key=key)
+
+    def list(self, sync_file_db=False):
         """
         List keys from cloud and decrypt metadata.
         """
-        keys = dict()
+        keys = list()
 
-        for key, encrypted_metadata in self.cloud.list().items():
-            metadata_str = gpg.decrypt(encrypted_metadata)
-            if metadata_str.data:
-                metadata = json.loads(metadata_str.data)
-                if "version" not in metadata:
-                    raise ValueError("File metadata is invalid")
-                assert(metadata["version"] == METADATA_VERSION)
-            else:
-                metadata = self._create_metadata(key)
-            keys[key] = metadata
+        if self._file_table is None or sync_file_db:
+            # If database is not used or we need to sync the database,
+            # read metadata from cloud.
+            self._file_db_drop_table()
+            for key, encrypted_metadata in self.cloud.list().items():
+                metadata_str = gpg.decrypt(encrypted_metadata)
+                if metadata_str.data:
+                    metadata = json.loads(metadata_str.data)
+                    if "metadata_version" not in metadata:
+                        raise ValueError("File metadata is invalid")
+                    assert(metadata["metadata_version"] == METADATA_VERSION)
+                else:
+                    metadata = self._create_metadata(key)
+                self._file_db_update_entry(metadata)
+                keys.append(metadata)
+        else:
+            # Read metadata from database.
+            for metadata in self._file_table.all():
+                keys.append(metadata)
 
         return keys
-
 
     def store(self, data, filename, stat_info=None):
         """
@@ -81,6 +122,7 @@ class Cloud(object):
         encrypted_metadata = gpg.encrypt(
             json.dumps(metadata), recipients, sign=signer)
         self.cloud.store(key, encrypted_data.data, encrypted_metadata.data)
+        self._file_db_update_entry(metadata)
         return key
 
     def store_from_filename(self, filename, cloud_filename=None):
@@ -103,11 +145,12 @@ class Cloud(object):
         metadata = gpg.decrypt(encrypted_metadata)
         if metadata.data:
             metadata = json.loads(metadata.data)
-            if "version" not in metadata:
+            if "metadata_version" not in metadata:
                 raise ValueError("File metadata is invalid")
-            assert(metadata["version"] == METADATA_VERSION)
+            assert(metadata["metadata_version"] == METADATA_VERSION)
             assert(encrypted_checksum == metadata['encrypted_checksum'])
             assert(checksum == metadata['checksum'])
+            self._file_db_update_entry(metadata)
         else:
             metadata = None
         return data.data, metadata
@@ -140,3 +183,4 @@ class Cloud(object):
         Delete data from cloud.
         """
         self.cloud.delete(key)
+        self._file_db_delete_entry(key)

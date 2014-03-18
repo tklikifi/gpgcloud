@@ -171,14 +171,15 @@ class TestCloud(unittest.TestCase):
                   c.config.get("aws", "secret_access_key"),
                   c.config.get("aws", "bucket"))
         cloud = Cloud(c, aws)
+        cloud._file_db_drop_table()
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         key1 = cloud.store(data1, "testdata/data1.txt")
         key2 = cloud.store(data2, "testdata/data2.txt")
-        for key, metadata in cloud.list().items():
-            if key == key1:
+        for metadata in cloud.list():
+            if metadata["key"] == key1:
                 self.assertEqual("testdata/data1.txt", metadata["path"])
-            if key == key2:
+            if metadata["key"] == key2:
                 self.assertEqual("testdata/data2.txt", metadata["path"])
         new_data1, new_metadata_1 = cloud.retrieve(key1)
         new_data2, new_metadata_2 = cloud.retrieve(key2)
@@ -195,15 +196,17 @@ class TestCloud(unittest.TestCase):
                   c.config.get("aws", "secret_access_key"),
                   c.config.get("aws", "bucket"))
         cloud = Cloud(c, aws)
+        cloud._file_db_drop_table()
+        cloud._file_table = cloud._db["files"]
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         key1 = cloud.store_from_filename("testdata/data1.txt")
         key2 = cloud.store_from_filename("testdata/data2.txt")
-        for key, metadata in cloud.list().items():
+        for metadata in cloud.list():
             print metadata
-            if key == key1:
+            if metadata["key"] == key1:
                 self.assertEqual("testdata/data1.txt", metadata["path"])
-            if key == key2:
+            if metadata["key"] == key2:
                 self.assertEqual("testdata/data2.txt", metadata["path"])
         new_metadata_1 = cloud.retrieve_to_filename(
             key1, "testdata/new_data1.txt")

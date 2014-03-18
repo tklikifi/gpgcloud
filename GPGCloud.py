@@ -43,6 +43,10 @@ def parse_args():
     parser.add_argument(
         '-k', '--key', type=str, help="key to file in cloud", default=None)
     parser.add_argument(
+        '-s', '--sync',
+        help="sync file database with data in cloud information",
+        action="store_true", default=False)
+    parser.add_argument(
         '-v', '--verbose', help="show more verbose information",
         action="store_true")
     parser.add_argument(
@@ -95,7 +99,7 @@ def main():
         output_file = args.outputfile
 
     if args.command == "list":
-        keys = cloud.list()
+        keys = cloud.list(args.sync)
         if len(keys) == 0:
             print "No files found in cloud."
             sys.exit(0)
@@ -105,7 +109,7 @@ def main():
                 "Mode", "Uid", "Gid", "Size", "Date", "Checksum", "Path")
             print "".join('-' for i in range(78))
 
-        for metadata in sorted(keys.values(), key=itemgetter('path')):
+        for metadata in sorted(keys, key=itemgetter('path')):
             if args.verbose:
                 print ("Path: '{path}', Size: {size}, "
                        "Encrypted size: {encrypted_size}, "
@@ -138,10 +142,10 @@ def main():
             cloud.retrieve_to_filename(args.key, output_file)
             sys.exit(0)
         keys = cloud.list()
-        for key, metadata in keys.items():
+        for metadata in keys:
             if metadata["path"] == input_file:
                 print "Retrieving file:", input_file, "->", output_file
-                cloud.retrieve_to_filename(key, output_file)
+                cloud.retrieve_to_filename(metadata["key"], output_file)
                 sys.exit(0)
         error_exit("File not found in cloud: " + input_file)
 
@@ -149,10 +153,14 @@ def main():
         if not input_file:
             error_exit("Cloud filename not given.")
         keys = cloud.list()
-        for key, metadata in keys.items():
+        for metadata in keys:
             if metadata["path"] == input_file:
-                print "Deleting file:", input_file
-                cloud.delete(key)
+                print "Removing file:", input_file
+                cloud.delete(metadata["key"])
+
+    else:
+        error_exit("Unknown command: {0}".format(args.command))
+
 
 if __name__ == "__main__":
     main()

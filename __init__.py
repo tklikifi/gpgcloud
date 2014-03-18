@@ -36,6 +36,7 @@ and tested using:
 Also the following Python modules must be installed:
 
 * boto==2.27.0
+* dataset==0.5.2
 * python_gnupg==0.3.6
 
 Quality
