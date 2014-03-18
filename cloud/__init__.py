@@ -84,10 +84,9 @@ class Cloud(object):
         """
         key = checksum_data(data + filename)
         checksum = checksum_data(data)
-        encoded_data = base64.encodestring(data)
         recipients = self.config.config.get("gnupg", "recipients").split(",")
         signer = self.config.config.get("gnupg", "signer")
-        encrypted_data = gpg.encrypt(encoded_data, recipients, sign=signer)
+        encrypted_data = gpg.encrypt(data, recipients, sign=signer)
         metadata = self._create_metadata(
             key, filename=filename, size=len(data), stat_info=stat_info,
             checksum=checksum, encrypted_size=len(encrypted_data.data),
@@ -112,9 +111,8 @@ class Cloud(object):
         """
         encrypted_data, encrypted_metadata = self.cloud.retrieve(key)
         encrypted_checksum = checksum_data(encrypted_data)
-        encoded_data = gpg.decrypt(encrypted_data)
-        data = base64.decodestring(encoded_data.data)
-        checksum = checksum_data(data)
+        data = gpg.decrypt(encrypted_data)
+        checksum = checksum_data(data.data)
         metadata = gpg.decrypt(encrypted_metadata)
         if metadata.data:
             metadata = json.loads(metadata.data)
@@ -125,7 +123,7 @@ class Cloud(object):
             assert(checksum == metadata['checksum'])
         else:
             metadata = None
-        return data, metadata
+        return data.data, metadata
 
     def retrieve_to_filename(self, key, filename=None):
         """
