@@ -20,7 +20,8 @@ class Config(object):
     """
     MANDATORY_CONFIGS = {
         "gnupg": ["recipients", "signer"],
-        "aws": ["access_key", "secret_access_key", "bucket"], }
+        "aws": ["access_key", "secret_access_key", "data_bucket",
+                "metadata_bucket"], }
 
     def __init__(self, config_file="~/.gpgcloud/gpgcloud.conf"):
         """
@@ -40,7 +41,8 @@ class Config(object):
             self.config.add_section("aws")
             self.config.set("aws", "access_key", "")
             self.config.set("aws", "secret_access_key", "")
-            self.config.set("aws", "bucket", random_string(20))
+            self.config.set("aws", "data_bucket", random_string(20))
+            self.config.set("aws", "metadata_bucket", random_string(20))
             self.config.write(fp)
         self.check()
 

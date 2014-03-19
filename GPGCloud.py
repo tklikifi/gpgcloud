@@ -8,6 +8,7 @@ from operator import itemgetter
 from aws import Aws
 from config import Config, ConfigError
 from cloud import Cloud
+from database import MetaDataDB
 import sys
 import time
 
@@ -41,19 +42,13 @@ def parse_args():
         help="configuration file for GPGCloud",
         default="~/.gpgcloud/gpgcloud.conf")
     parser.add_argument(
-        '-k', '--key', type=str, help="key to file in cloud", default=None)
-    parser.add_argument(
-        '-s', '--sync',
-        help="sync file database with data in cloud information",
-        action="store_true", default=False)
-    parser.add_argument(
         '-v', '--verbose', help="show more verbose information",
         action="store_true")
     parser.add_argument(
         '-V', '--version', help="show version", action="store_true")
     parser.add_argument(
         'command', type=str, nargs='?',
-        help="command (list|store|retrieve|remove) (default: list)",
+        help="command (list|store|retrieve|remove|sync) (default: list)",
         default="list")
     parser.add_argument(
         'inputfile', type=str, nargs='?',
@@ -65,6 +60,27 @@ def parse_args():
              "the name of the local file when retrieving file from cloud")
 
     return parser.parse_args()
+
+
+def show_files(metadata_list, verbose=False):
+    if not verbose:
+        print "{0:<8}{1:<7}{2:<7}{3:<10}{4:<21}{5:<12}{6}".format(
+            "Mode", "Uid", "Gid", "Size", "Date", "Checksum", "Path")
+        print "".join('-' for i in range(78))
+
+    for metadata in sorted(metadata_list, key=itemgetter('path')):
+        if verbose:
+            for k, v in metadata.items():
+                print "{0}: {1}".format(k.capitalize().replace('_', ' '), v)
+            print
+        else:
+            mtime = time.strftime(
+                '%Y-%m-%d %H:%M:%S',
+                time.localtime(metadata["mtime"]))
+            metadata["mtime"] = mtime
+            metadata["checksum"] = metadata["checksum"][-10:]
+            print ("{mode:<8o}{uid:<7}{gid:<7}{encrypted_size:<10}"
+                   "{mtime:<21}{checksum:<12}{path}".format(**metadata))
 
 
 def main():
@@ -86,9 +102,11 @@ def main():
     aws_cloud = Aws(
         config.config.get("aws", "access_key"),
         config.config.get("aws", "secret_access_key"),
-        config.config.get("aws", "bucket"))
-
-    cloud = Cloud(config, aws_cloud)
+        config.config.get("aws", "data_bucket"),
+        config.config.get("aws", "metadata_bucket"))
+    database = MetaDataDB(
+        config.config.get("general", "database"))
+    cloud = Cloud(config, aws_cloud, database)
 
     input_file = None
     output_file = None
@@ -99,31 +117,35 @@ def main():
         output_file = args.outputfile
 
     if args.command == "list":
-        keys = cloud.list(args.sync)
-        if len(keys) == 0:
+        metadata_list = cloud.list()
+        if len(metadata_list) == 0:
             print "No files found in cloud."
             sys.exit(0)
+        show_files(metadata_list, args.verbose)
 
-        if not args.verbose:
-            print "{0:<8}{1:<7}{2:<7}{3:<10}{4:<21}{5:<12}{6}".format(
-                "Mode", "Uid", "Gid", "Size", "Date", "Checksum", "Path")
-            print "".join('-' for i in range(78))
+    elif args.command == "list-aws":
+        # This is a utility command to list raw data in Amazon S3.
+        print "AWS metadata:"
+        print "============="
+        for k, data in cloud.provider.list_metadata().items():
+            print "Key:", k
+            print "Data:"
+            print data
 
-        for metadata in sorted(keys, key=itemgetter('path')):
-            if args.verbose:
-                print ("Path: '{path}', Size: {size}, "
-                       "Encrypted size: {encrypted_size}, "
-                       "Mode: {mode:o}, Uid: {uid}, Gid: {gid}, "
-                       "Ctime: {ctime}, Mtime: {mtime}, Atime: {atime}, "
-                       "Checksum: {checksum}".format(**metadata))
-            else:
-                mtime = time.strftime(
-                    '%Y-%m-%d %H:%M:%S',
-                    time.localtime(metadata["mtime"]))
-                metadata["mtime"] = mtime
-                metadata["checksum"] = metadata["checksum"][-10:]
-                print ("{mode:<8o}{uid:<7}{gid:<7}{encrypted_size:<10}"
-                       "{mtime:<21}{checksum:<12}{path}".format(**metadata))
+        print "AWS data:"
+        print "========="
+        for k, data in cloud.provider.list().items():
+            print "Key:", k
+            print "Data:"
+            print data
+
+    elif args.command == "sync":
+        cloud.sync()
+        metadata_list = cloud.list()
+        if len(metadata_list) == 0:
+            print "No files found in cloud."
+            sys.exit(0)
+        show_files(metadata_list, args.verbose)
 
     elif args.command == "store":
         if not input_file:
@@ -138,25 +160,20 @@ def main():
             error_exit("Cloud filename not given.")
         if not output_file:
             output_file = input_file
-        if args.key:
-            cloud.retrieve_to_filename(args.key, output_file)
-            sys.exit(0)
-        keys = cloud.list()
-        for metadata in keys:
+        for metadata in cloud.list():
             if metadata["path"] == input_file:
                 print "Retrieving file:", input_file, "->", output_file
-                cloud.retrieve_to_filename(metadata["key"], output_file)
+                cloud.retrieve_to_filename(metadata, output_file)
                 sys.exit(0)
         error_exit("File not found in cloud: " + input_file)
 
     elif args.command == "remove":
         if not input_file:
             error_exit("Cloud filename not given.")
-        keys = cloud.list()
-        for metadata in keys:
+        for metadata in cloud.list():
             if metadata["path"] == input_file:
                 print "Removing file:", input_file
-                cloud.delete(metadata["key"])
+                cloud.delete(metadata)
 
     else:
         error_exit("Unknown command: {0}".format(args.command))
