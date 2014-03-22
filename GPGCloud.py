@@ -21,7 +21,8 @@ def error_exit(error):
         error = "{0}: {1} (key: {2})".format(
             error.__class__.__name__, str(error), error.key)
     elif isinstance(error, GPGError):
-        error = str(error)
+        error = "{0}: {1}".format(
+            error.__class__.__name__, str(error))
     elif isinstance(error, Exception):
         error = str(error)
     sys.stderr.write("ERROR: " + error + "\n")

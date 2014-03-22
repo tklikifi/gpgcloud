@@ -20,11 +20,11 @@ class GPGError(Exception):
     """
     Exception raised if GPG encryption or decryption fails.
     """
-    def __init__(self, value):
-        self.value = value
+    def __init__(self, result):
+        self.result = result
 
     def __str__(self):
-        return "gpg: " + self.value.status
+        return self.result.status
 
 
 class MetadataError(Exception):
