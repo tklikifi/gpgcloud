@@ -9,6 +9,7 @@ from aws import Aws
 from config import Config, ConfigError
 from cloud import Cloud, DataError, GPGError, MetadataError
 from database import MetaDataDB
+import os
 import sys
 import time
 
@@ -20,11 +21,9 @@ def error_exit(error):
     if isinstance(error, (DataError, MetadataError)):
         error = "{0}: {1} (key: {2})".format(
             error.__class__.__name__, str(error), error.key)
-    elif isinstance(error, GPGError):
+    elif isinstance(error, Exception):
         error = "{0}: {1}".format(
             error.__class__.__name__, str(error))
-    elif isinstance(error, Exception):
-        error = str(error)
     sys.stderr.write("ERROR: " + error + "\n")
     sys.exit(1)
 
@@ -94,6 +93,33 @@ def show_files(metadata_list, verbose=False):
             metadata["checksum"] = metadata["checksum"][-10:]
             print ("{mode:<8o}{uid:<7}{gid:<7}{encrypted_size:<10}"
                    "{mtime:<21}{checksum:<12}{path}".format(**metadata))
+
+
+def backup_file(cloud, input_file, output_file):
+    """
+    Backup one file to cloud.
+    """
+    print "Backing up file:", input_file, "->", output_file
+    try:
+        cloud.store_from_filename(input_file, output_file)
+    except Exception as e:
+        error_exit(e)
+
+
+def backup_directory(cloud, input_file, output_file):
+    """
+    Backup directory to cloud.
+    """
+    for root, dirnames, filenames in os.walk(input_file):
+        for filename in filenames:
+            filename = root + "/" + filename
+            if filename.startswith("./"):
+                filename = filename[2:]
+            if output_file != input_file:
+                cloud_file = os.path.normpath(output_file + "/" + filename)
+            else:
+                cloud_file = filename
+            backup_file(cloud, filename, cloud_file)
 
 
 def main():
@@ -174,38 +200,88 @@ def main():
         show_files(metadata_list, args.verbose)
 
     elif args.command == "backup":
+
         if not input_file:
             error_exit("Local filename not given.")
         if not output_file:
             output_file = input_file
-        print "Backing up file:", input_file, "->", output_file
-        try:
-            cloud.store_from_filename(input_file, output_file)
-        except (GPGError, MetadataError, DataError) as e:
-            error_exit(e)
+        if os.path.isdir(input_file):
+            backup_directory(cloud, input_file, output_file)
+            sys.exit(0)
+        elif os.path.isfile(input_file) or os.path.islink(input_file):
+            backup_file(cloud, input_file, output_file)
+        else:
+            error_exit("No such file or directory: '{0}'".format(input_file))
 
     elif args.command == "restore":
         if not input_file:
             error_exit("Cloud filename not given.")
-        if not output_file:
-            output_file = input_file
-        for metadata in cloud.list():
+        input_file = os.path.normpath(input_file)
+
+        if output_file:
+            output_file = os.path.normpath(output_file)
+
+        # Get the list of files.
+        cloud_list = cloud.list()
+
+        # First, check whether we have an exact match.
+        for metadata in cloud_list:
             if metadata["path"] == input_file:
+                if not output_file:
+                    output_file = input_file
                 print "Restoring file:", input_file, "->", output_file
                 try:
                     cloud.retrieve_to_filename(metadata, output_file)
                 except (GPGError, MetadataError, DataError) as e:
                     error_exit(e)
                 sys.exit(0)
+
+        # Then, try to find all files, that have the same directory.
+        file_found = False
+        for metadata in cloud_list:
+            if metadata["path"].startswith(input_file + "/"):
+                file_found = True
+                if not output_file:
+                    local_file = metadata["path"]
+                else:
+                    local_file = output_file + "/" + metadata["path"]
+                print "Restoring file:", metadata["path"], "->", local_file
+                try:
+                    cloud.retrieve_to_filename(metadata, local_file)
+                except (GPGError, MetadataError, DataError) as e:
+                    error_exit(e)
+
+        if file_found:
+            sys.exit(0)
+
         error_exit("File not found in cloud: " + input_file)
 
     elif args.command == "remove":
         if not input_file:
             error_exit("Cloud filename not given.")
-        for metadata in cloud.list():
+
+        # Get the list of files.
+        cloud_list = cloud.list()
+
+        # First, check whether we have an exact match.
+        for metadata in cloud_list:
             if metadata["path"] == input_file:
                 print "Removing file:", input_file
                 cloud.delete(metadata)
+                sys.exit(0)
+
+        # Then, try to find all files, that have the same directory.
+        file_found = False
+        for metadata in cloud_list:
+            if metadata["path"].startswith(input_file + "/"):
+                file_found = True
+                print "Removing file:", metadata["path"]
+                cloud.delete(metadata)
+
+        if file_found:
+            sys.exit(0)
+
+        error_exit("File not found in cloud: " + input_file)
 
     else:
         error_exit("Unknown command: {0}".format(args.command))

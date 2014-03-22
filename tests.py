@@ -228,19 +228,33 @@ class TestCloud(unittest.TestCase):
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store(data1, "testdata/data1.txt")
         metadata2 = cloud.store(data2, "testdata/data2.txt")
+        metadata3 = cloud.store(data2, "testdata/data3.txt")
+        metadata4 = cloud.store(data2, "testdata/data4.txt")
         for metadata in cloud.list():
             if metadata["key"] == metadata1["key"]:
                 self.assertEqual("testdata/data1.txt", metadata["path"])
             if metadata["key"] == metadata2["key"]:
                 self.assertEqual("testdata/data2.txt", metadata["path"])
+            if metadata["key"] == metadata3["key"]:
+                self.assertEqual("testdata/data3.txt", metadata["path"])
+            if metadata["key"] == metadata4["key"]:
+                self.assertEqual("testdata/data4.txt", metadata["path"])
         new_data1 = cloud.retrieve(metadata1)
         new_data2 = cloud.retrieve(metadata2)
+        new_data3 = cloud.retrieve(metadata3)
+        new_data4 = cloud.retrieve(metadata4)
         self.assertEqual(data1, new_data1)
         self.assertEqual("testdata/data1.txt", metadata1["path"])
         self.assertEqual(data2, new_data2)
         self.assertEqual("testdata/data2.txt", metadata2["path"])
+        self.assertEqual(data2, new_data3)
+        self.assertEqual("testdata/data3.txt", metadata3["path"])
+        self.assertEqual(data2, new_data4)
+        self.assertEqual("testdata/data4.txt", metadata4["path"])
         cloud.delete(metadata1)
         cloud.delete(metadata2)
+        cloud.delete(metadata3)
+        cloud.delete(metadata4)
 
     def test_cloud_store_filename(self):
         """
@@ -256,26 +270,48 @@ class TestCloud(unittest.TestCase):
         cloud = Cloud(c, aws, database)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
-        metadata1 = cloud.store_from_filename("testdata/data1.txt")
-        metadata2 = cloud.store_from_filename("testdata/data2.txt")
+        metadata1 = cloud.store_from_filename(
+            "testdata/data1.txt", "testdata/data1.txt")
+        metadata2 = cloud.store_from_filename(
+            "testdata/data2.txt", "testdata/data2.txt")
+        metadata3 = cloud.store_from_filename(
+            "testdata/data2.txt", "testdata/data3.txt")
+        metadata4 = cloud.store_from_filename(
+            "testdata/data2.txt", "testdata/data4.txt")
         for metadata in cloud.list():
             print metadata
             if metadata["key"] == metadata1["key"]:
                 self.assertEqual("testdata/data1.txt", metadata["path"])
             if metadata["key"] == metadata2["key"]:
                 self.assertEqual("testdata/data2.txt", metadata["path"])
+            if metadata["key"] == metadata3["key"]:
+                self.assertEqual("testdata/data3.txt", metadata["path"])
+            if metadata["key"] == metadata4["key"]:
+                self.assertEqual("testdata/data4.txt", metadata["path"])
         cloud.retrieve_to_filename(
             metadata1, "testdata/new_data1.txt")
         cloud.retrieve_to_filename(
             metadata2, "testdata/new_data2.txt")
+        cloud.retrieve_to_filename(
+            metadata3, "testdata/new_data3.txt")
+        cloud.retrieve_to_filename(
+            metadata4, "testdata/new_data4.txt")
         self.assertEqual(data1, file("testdata/new_data1.txt").read())
         self.assertEqual("testdata/data1.txt", metadata1["path"])
         self.assertEqual(data2, file("testdata/new_data2.txt").read())
         self.assertEqual("testdata/data2.txt", metadata2["path"])
+        self.assertEqual(data2, file("testdata/new_data3.txt").read())
+        self.assertEqual("testdata/data3.txt", metadata3["path"])
+        self.assertEqual(data2, file("testdata/new_data4.txt").read())
+        self.assertEqual("testdata/data4.txt", metadata4["path"])
         cloud.delete(metadata1)
         cloud.delete(metadata2)
+        cloud.delete(metadata3)
+        cloud.delete(metadata4)
         os.remove("testdata/new_data1.txt")
         os.remove("testdata/new_data2.txt")
+        os.remove("testdata/new_data3.txt")
+        os.remove("testdata/new_data4.txt")
 
 
 if __name__ == "__main__":

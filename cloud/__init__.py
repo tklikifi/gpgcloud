@@ -120,18 +120,29 @@ class Cloud(object):
         """
         Encrypt data and store it to cloud.
         """
-        # Create encrypted data.
         key = checksum_data(data + cloud_filename)
         checksum = checksum_data(data)
-        encrypted_data = gpg.encrypt(data, self.recipients, sign=self.signer)
-        if not encrypted_data.ok:
-            raise GPGError(encrypted_data)
-        encrypted_checksum = checksum_data(encrypted_data.data)
+        size = len(data)
+
+        # Do we have the data already stored into cloud?
+        old_metadata = self.database.find_one(checksum=checksum)
+        if old_metadata:
+            encrypted_data = None
+            encrypted_checksum = old_metadata["encrypted_checksum"]
+            encrypted_size = old_metadata["encrypted_size"]
+        else:
+            # Create encrypted data.
+            encrypted_data = gpg.encrypt(
+                data, self.recipients, sign=self.signer)
+            if not encrypted_data.ok:
+                raise GPGError(encrypted_data)
+            encrypted_checksum = checksum_data(encrypted_data.data)
+            encrypted_size = len(encrypted_data.data)
 
         # Create encrypted metadata.
         metadata = self._create_metadata(
-            key, filename=cloud_filename, size=len(data), stat_info=stat_info,
-            checksum=checksum, encrypted_size=len(encrypted_data.data),
+            key, filename=cloud_filename, size=size, stat_info=stat_info,
+            checksum=checksum, encrypted_size=encrypted_size,
             encrypted_checksum=encrypted_checksum)
         encrypted_metadata = gpg.encrypt(
             json.dumps(metadata), self.recipients, sign=self.signer)
@@ -140,7 +151,8 @@ class Cloud(object):
 
         # Store metadata and data to cloud and update database.
         self.provider.store_metadata(key, encrypted_metadata.data)
-        self.provider.store(checksum, encrypted_data.data)
+        if not old_metadata:
+            self.provider.store(checksum, encrypted_data.data)
         self.database.update(metadata)
         return metadata
 
@@ -151,24 +163,34 @@ class Cloud(object):
         if cloud_filename is None:
             cloud_filename = filename
 
-        # Create encrypted data file.
         stat_info = os.stat(filename)
-        encrypted_file = tempfile.NamedTemporaryFile()
         key = checksum_file(filename, extra_data=cloud_filename)
         checksum = checksum_file(filename)
-        encrypted_data = gpg.encrypt_file(
-            file(filename), self.recipients, sign=self.signer,
-            output=encrypted_file.name)
-        if not encrypted_data.ok:
-            raise GPGError(encrypted_data)
-        encrypted_stat_info = os.stat(encrypted_file.name)
-        encrypted_checksum = checksum_file(encrypted_file.name)
+        size = stat_info.st_size
+
+        # Do we have the data already stored into cloud?
+        old_metadata = self.database.find_one(checksum=checksum)
+        if old_metadata:
+            encrypted_file = None
+            encrypted_checksum = old_metadata["encrypted_checksum"]
+            encrypted_size = old_metadata["encrypted_size"]
+        else:
+            # Create encrypted data file.
+            encrypted_file = tempfile.NamedTemporaryFile()
+            encrypted_data = gpg.encrypt_file(
+                file(filename), self.recipients, sign=self.signer,
+                output=encrypted_file.name)
+            if not encrypted_data.ok:
+                raise GPGError(encrypted_data)
+            encrypted_stat_info = os.stat(encrypted_file.name)
+            encrypted_checksum = checksum_file(encrypted_file.name)
+            encrypted_size = encrypted_stat_info.st_size
 
         # Create encrypted metadata.
         metadata = self._create_metadata(
-            key, filename=cloud_filename, size=stat_info.st_size,
+            key, filename=cloud_filename, size=size,
             stat_info=stat_info, checksum=checksum,
-            encrypted_size=encrypted_stat_info.st_size,
+            encrypted_size=encrypted_size,
             encrypted_checksum=encrypted_checksum)
         encrypted_metadata = gpg.encrypt(
             json.dumps(metadata), self.recipients, sign=self.signer)
@@ -177,10 +199,10 @@ class Cloud(object):
 
         # Store metadata and data to cloud and update database.
         self.provider.store_metadata(key, encrypted_metadata.data)
-        self.provider.store_from_filename(checksum, encrypted_file.name)
+        if not old_metadata:
+            self.provider.store_from_filename(checksum, encrypted_file.name)
+            encrypted_file.close()
         self.database.update(metadata)
-
-        encrypted_file.close()
 
         return metadata
 
@@ -257,6 +279,8 @@ class Cloud(object):
         """
         Delete data from cloud.
         """
-        self.provider.delete(metadata["checksum"])
         self.provider.delete_metadata(metadata["key"])
         self.database.delete(metadata["key"])
+        if not self.database.find_one(checksum=metadata["checksum"]):
+            # All metadata is removed, remove the data.
+            self.provider.delete(metadata["checksum"])

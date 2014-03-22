@@ -38,3 +38,9 @@ class MetaDataDB(object):
         List all entries in the database.
         """
         return self._metadata.all()
+
+    def find(self, **kwargs):
+        return self._metadata.find(**kwargs)
+
+    def find_one(self, **kwargs):
+        return self._metadata.find_one(**kwargs)
