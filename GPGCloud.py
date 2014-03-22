@@ -7,7 +7,7 @@ import argparse
 from operator import itemgetter
 from aws import Aws
 from config import Config, ConfigError
-from cloud import Cloud
+from cloud import Cloud, GPGError
 from database import MetaDataDB
 import sys
 import time
@@ -140,7 +140,10 @@ def main():
             print data
 
     elif args.command == "sync":
-        cloud.sync()
+        try:
+            cloud.sync()
+        except GPGError as e:
+            error_exit(str(e))
         metadata_list = cloud.list()
         if len(metadata_list) == 0:
             print "No files found in cloud."
@@ -153,7 +156,10 @@ def main():
         if not output_file:
             output_file = input_file
         print "Storing file:", input_file, "->", output_file
-        cloud.store_from_filename(input_file, output_file)
+        try:
+            cloud.store_from_filename(input_file, output_file)
+        except GPGError as e:
+            error_exit(str(e))
 
     elif args.command == "retrieve":
         if not input_file:
@@ -163,7 +169,10 @@ def main():
         for metadata in cloud.list():
             if metadata["path"] == input_file:
                 print "Retrieving file:", input_file, "->", output_file
-                cloud.retrieve_to_filename(metadata, output_file)
+                try:
+                    cloud.retrieve_to_filename(metadata, output_file)
+                except GPGError as e:
+                    error_exit(str(e))
                 sys.exit(0)
         error_exit("File not found in cloud: " + input_file)
 

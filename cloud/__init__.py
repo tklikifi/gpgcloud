@@ -16,6 +16,17 @@ METADATA_VERSION = 1
 gpg = gnupg.GPG(use_agent=True)
 
 
+class GPGError(Exception):
+    """
+    Exception raised if GPG encryption or decryption fails.
+    """
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return "gpg: " + self.value.status
+
+
 class Cloud(object):
     """
     Basic class for cloud access.
@@ -59,12 +70,16 @@ class Cloud(object):
         """
         self.database.drop()
         for key, encrypted_metadata in self.provider.list_metadata().items():
-            metadata_str = gpg.decrypt(encrypted_metadata)
-            assert(metadata_str.status == "decryption ok")
-            assert(metadata_str.data)
-            metadata = json.loads(metadata_str.data)
-            assert("metadata_version" in metadata)
-            assert(metadata["metadata_version"] == METADATA_VERSION)
+            metadata = gpg.decrypt(encrypted_metadata)
+            if not metadata.ok:
+                raise GPGError(metadata)
+            assert metadata.data, "No metadata"
+            metadata = json.loads(metadata.data)
+            assert "metadata_version" in metadata,\
+                "No metadata version available"
+            assert metadata["metadata_version"] == METADATA_VERSION,\
+                "Wrong metadata version: {0} != {1}".format(metadata[
+                    "metadata_version"], METADATA_VERSION)
             self.database.update(metadata)
 
     def list(self):
@@ -85,7 +100,8 @@ class Cloud(object):
         key = checksum_data(data + cloud_filename)
         checksum = checksum_data(data)
         encrypted_data = gpg.encrypt(data, self.recipients, sign=self.signer)
-        assert(encrypted_data.status == "encryption ok")
+        if not encrypted_data.ok:
+            raise GPGError(encrypted_data)
         encrypted_checksum = checksum_data(encrypted_data.data)
 
         # Create encrypted metadata.
@@ -95,7 +111,8 @@ class Cloud(object):
             encrypted_checksum=encrypted_checksum)
         encrypted_metadata = gpg.encrypt(
             json.dumps(metadata), self.recipients, sign=self.signer)
-        assert(encrypted_metadata.status == "encryption ok")
+        if not encrypted_metadata.ok:
+            raise GPGError(encrypted_metadata)
 
         # Store metadata and data to cloud and update database.
         self.provider.store_metadata(key, encrypted_metadata.data)
@@ -118,7 +135,8 @@ class Cloud(object):
         encrypted_data = gpg.encrypt_file(
             file(filename), self.recipients, sign=self.signer,
             output=encrypted_file.name)
-        assert(encrypted_data.status == "encryption ok")
+        if not encrypted_data.ok:
+            raise GPGError(encrypted_data)
         encrypted_stat_info = os.stat(encrypted_file.name)
         encrypted_checksum = checksum_file(encrypted_file.name)
 
@@ -130,7 +148,8 @@ class Cloud(object):
             encrypted_checksum=encrypted_checksum)
         encrypted_metadata = gpg.encrypt(
             json.dumps(metadata), self.recipients, sign=self.signer)
-        assert(encrypted_metadata.status == "encryption ok")
+        if not encrypted_metadata.ok:
+            raise GPGError(encrypted_metadata)
 
         # Store metadata and data to cloud and update database.
         self.provider.store_metadata(key, encrypted_metadata.data)
@@ -148,13 +167,18 @@ class Cloud(object):
         # Get data from cloud.
         encrypted_data = self.provider.retrieve(metadata["checksum"])
         encrypted_checksum = checksum_data(encrypted_data)
-        assert(encrypted_checksum == metadata['encrypted_checksum'])
+        assert encrypted_checksum == metadata['encrypted_checksum'], \
+            "Wrong encrypted data checksum: {0} != {1}".format(
+                encrypted_checksum, metadata["encrypted_checksum"])
 
         # Decrypt data.
         data = gpg.decrypt(encrypted_data)
-        assert(data.status == "decryption ok")
+        if not data.ok:
+            raise GPGError(data)
         checksum = checksum_data(data.data)
-        assert(checksum == metadata['checksum'])
+        assert checksum == metadata['checksum'], \
+            "Wrong data checksum: {0} != {1}".format(
+                checksum, metadata["checksum"])
         return data.data
 
     def retrieve_to_filename(self, metadata, filename=None):
@@ -177,14 +201,19 @@ class Cloud(object):
         self.provider.retrieve_to_filename(
             metadata["checksum"], encrypted_file.name)
         encrypted_checksum = checksum_file(encrypted_file.name)
-        assert(encrypted_checksum == metadata['encrypted_checksum'])
+        assert encrypted_checksum == metadata['encrypted_checksum'], \
+            "Wrong encrypted data checksum: {0} != {1}".format(
+                encrypted_checksum, metadata["encrypted_checksum"])
 
         # Decrypt the data in temporary file and store it to given filename.
         data = gpg.decrypt_file(
             file(encrypted_file.name), output=filename)
-        assert(data.status == "decryption ok")
+        if not data.ok:
+            raise GPGError(data)
         checksum = checksum_file(filename)
-        assert(checksum == metadata['checksum'])
+        assert checksum == metadata['checksum'], \
+            "Wrong data checksum: {0} != {1}".format(
+                checksum, metadata["checksum"])
 
         # Set file attributes.
         os.chmod(filename, metadata["mode"])
