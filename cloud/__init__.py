@@ -7,8 +7,9 @@ import errno
 import gnupg
 import json
 import os
+import tempfile
 
-from utils import checksum_data
+from utils import checksum_data, checksum_file
 
 
 METADATA_VERSION = 1
@@ -23,6 +24,9 @@ class Cloud(object):
         self.config = config
         self.provider = provider
         self.database = database
+        self.recipients = self.config.config.get(
+            "gnupg", "recipients").split(",")
+        self.signer = self.config.config.get("gnupg", "signer")
 
     def _create_metadata(self, key, filename=None, size=0, stat_info=None,
                          checksum=None, encrypted_size=0,
@@ -56,6 +60,7 @@ class Cloud(object):
         self.database.drop()
         for key, encrypted_metadata in self.provider.list_metadata().items():
             metadata_str = gpg.decrypt(encrypted_metadata)
+            assert(metadata_str.status == "decryption ok")
             assert(metadata_str.data)
             metadata = json.loads(metadata_str.data)
             assert("metadata_version" in metadata)
@@ -72,21 +77,27 @@ class Cloud(object):
 
         return metadata
 
-    def store(self, data, filename, stat_info=None):
+    def store(self, data, cloud_filename, stat_info=None):
         """
-        Encrypt file data and metadata and store them to cloud.
+        Encrypt data and store it to cloud.
         """
-        key = checksum_data(data + filename)
+        # Create encrypted data.
+        key = checksum_data(data + cloud_filename)
         checksum = checksum_data(data)
-        recipients = self.config.config.get("gnupg", "recipients").split(",")
-        signer = self.config.config.get("gnupg", "signer")
-        encrypted_data = gpg.encrypt(data, recipients, sign=signer)
+        encrypted_data = gpg.encrypt(data, self.recipients, sign=self.signer)
+        assert(encrypted_data.status == "encryption ok")
+        encrypted_checksum = checksum_data(encrypted_data.data)
+
+        # Create encrypted metadata.
         metadata = self._create_metadata(
-            key, filename=filename, size=len(data), stat_info=stat_info,
+            key, filename=cloud_filename, size=len(data), stat_info=stat_info,
             checksum=checksum, encrypted_size=len(encrypted_data.data),
-            encrypted_checksum=checksum_data(encrypted_data.data))
+            encrypted_checksum=encrypted_checksum)
         encrypted_metadata = gpg.encrypt(
-            json.dumps(metadata), recipients, sign=signer)
+            json.dumps(metadata), self.recipients, sign=self.signer)
+        assert(encrypted_metadata.status == "encryption ok")
+
+        # Store metadata and data to cloud and update database.
         self.provider.store_metadata(key, encrypted_metadata.data)
         self.provider.store(checksum, encrypted_data.data)
         self.database.update(metadata)
@@ -98,18 +109,51 @@ class Cloud(object):
         """
         if cloud_filename is None:
             cloud_filename = filename
-        data = file(filename, "rb").read()
-        return self.store(data, cloud_filename, os.stat(filename))
+
+        # Create encrypted data file.
+        stat_info = os.stat(filename)
+        encrypted_file = tempfile.NamedTemporaryFile()
+        key = checksum_file(filename, extra_data=cloud_filename)
+        checksum = checksum_file(filename)
+        encrypted_data = gpg.encrypt_file(
+            file(filename), self.recipients, sign=self.signer,
+            output=encrypted_file.name)
+        assert(encrypted_data.status == "encryption ok")
+        encrypted_stat_info = os.stat(encrypted_file.name)
+        encrypted_checksum = checksum_file(encrypted_file.name)
+
+        # Create encrypted metadata.
+        metadata = self._create_metadata(
+            key, filename=cloud_filename, size=stat_info.st_size,
+            stat_info=stat_info, checksum=checksum,
+            encrypted_size=encrypted_stat_info.st_size,
+            encrypted_checksum=encrypted_checksum)
+        encrypted_metadata = gpg.encrypt(
+            json.dumps(metadata), self.recipients, sign=self.signer)
+        assert(encrypted_metadata.status == "encryption ok")
+
+        # Store metadata and data to cloud and update database.
+        self.provider.store_metadata(key, encrypted_metadata.data)
+        self.provider.store_from_filename(checksum, encrypted_file.name)
+        self.database.update(metadata)
+
+        encrypted_file.close()
+
+        return metadata
 
     def retrieve(self, metadata):
         """
         Retrieve data from cloud and decrypt it.
         """
+        # Get data from cloud.
         encrypted_data = self.provider.retrieve(metadata["checksum"])
         encrypted_checksum = checksum_data(encrypted_data)
-        data = gpg.decrypt(encrypted_data)
-        checksum = checksum_data(data.data)
         assert(encrypted_checksum == metadata['encrypted_checksum'])
+
+        # Decrypt data.
+        data = gpg.decrypt(encrypted_data)
+        assert(data.status == "decryption ok")
+        checksum = checksum_data(data.data)
         assert(checksum == metadata['checksum'])
         return data.data
 
@@ -117,9 +161,9 @@ class Cloud(object):
         """
         Retrieve data from cloud and decrypt it.
         """
-        data = self.retrieve(metadata)
         if filename is None:
             filename = metadata["path"]
+
         directory_name = os.path.dirname(filename)
         if directory_name:
             try:
@@ -127,9 +171,26 @@ class Cloud(object):
             except OSError as e:
                 if e.errno != errno.EEXIST:
                     raise
-        file(filename, "wb").write(data)
+
+        # Get data from cloud and store it to a temporary file.
+        encrypted_file = tempfile.NamedTemporaryFile()
+        self.provider.retrieve_to_filename(
+            metadata["checksum"], encrypted_file.name)
+        encrypted_checksum = checksum_file(encrypted_file.name)
+        assert(encrypted_checksum == metadata['encrypted_checksum'])
+
+        # Decrypt the data in temporary file and store it to given filename.
+        data = gpg.decrypt_file(
+            file(encrypted_file.name), output=filename)
+        assert(data.status == "decryption ok")
+        checksum = checksum_file(filename)
+        assert(checksum == metadata['checksum'])
+
+        # Set file attributes.
         os.chmod(filename, metadata["mode"])
         os.utime(filename, (metadata["atime"], metadata["mtime"]))
+
+        encrypted_file.close()
 
     def delete(self, metadata):
         """
