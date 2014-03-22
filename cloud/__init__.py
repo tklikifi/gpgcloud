@@ -27,6 +27,25 @@ class GPGError(Exception):
         return "gpg: " + self.value.status
 
 
+class MetadataError(Exception):
+    """
+    Exception raised for metadata errors.
+    """
+    def __init__(self, key, message):
+        self.key = key
+        self.message = message
+
+    def __str__(self):
+        return self.message
+
+
+class DataError(MetadataError):
+    """
+    Exception raised for data errors.
+    """
+    pass
+
+
 class Cloud(object):
     """
     Basic class for cloud access.
@@ -73,13 +92,18 @@ class Cloud(object):
             metadata = gpg.decrypt(encrypted_metadata)
             if not metadata.ok:
                 raise GPGError(metadata)
-            assert metadata.data, "No metadata"
-            metadata = json.loads(metadata.data)
-            assert "metadata_version" in metadata,\
-                "No metadata version available"
-            assert metadata["metadata_version"] == METADATA_VERSION,\
-                "Wrong metadata version: {0} != {1}".format(metadata[
-                    "metadata_version"], METADATA_VERSION)
+            if not metadata.data:
+                raise MetadataError(key, "No metadata")
+            try:
+                metadata = json.loads(metadata.data)
+            except ValueError as e:
+                raise MetadataError(key, "Invalid metadata: {0}".format(e))
+            if "metadata_version" not in metadata:
+                raise MetadataError(key, "No metadata version available")
+            if metadata["metadata_version"] != METADATA_VERSION:
+                raise MetadataError(
+                    key, "Wrong metadata version: {0} != {1}".format(
+                        metadata["metadata_version"], METADATA_VERSION))
             self.database.update(metadata)
 
     def list(self):
@@ -167,18 +191,22 @@ class Cloud(object):
         # Get data from cloud.
         encrypted_data = self.provider.retrieve(metadata["checksum"])
         encrypted_checksum = checksum_data(encrypted_data)
-        assert encrypted_checksum == metadata['encrypted_checksum'], \
-            "Wrong encrypted data checksum: {0} != {1}".format(
-                encrypted_checksum, metadata["encrypted_checksum"])
+        if encrypted_checksum != metadata['encrypted_checksum']:
+            raise DataError(
+                metadata["checksum"],
+                "Wrong encrypted data checksum: {0} != {1}".format(
+                    encrypted_checksum, metadata["encrypted_checksum"]))
 
         # Decrypt data.
         data = gpg.decrypt(encrypted_data)
         if not data.ok:
             raise GPGError(data)
         checksum = checksum_data(data.data)
-        assert checksum == metadata['checksum'], \
-            "Wrong data checksum: {0} != {1}".format(
-                checksum, metadata["checksum"])
+        if checksum != metadata['checksum']:
+            raise DataError(
+                metadata["checksum"],
+                "Wrong data checksum: {0} != {1}".format(
+                    checksum, metadata["checksum"]))
         return data.data
 
     def retrieve_to_filename(self, metadata, filename=None):
@@ -201,9 +229,11 @@ class Cloud(object):
         self.provider.retrieve_to_filename(
             metadata["checksum"], encrypted_file.name)
         encrypted_checksum = checksum_file(encrypted_file.name)
-        assert encrypted_checksum == metadata['encrypted_checksum'], \
-            "Wrong encrypted data checksum: {0} != {1}".format(
-                encrypted_checksum, metadata["encrypted_checksum"])
+        if encrypted_checksum != metadata['encrypted_checksum']:
+            raise DataError(
+                metadata["checksum"],
+                "Wrong encrypted data checksum: {0} != {1}".format(
+                    encrypted_checksum, metadata["encrypted_checksum"]))
 
         # Decrypt the data in temporary file and store it to given filename.
         data = gpg.decrypt_file(
@@ -211,9 +241,11 @@ class Cloud(object):
         if not data.ok:
             raise GPGError(data)
         checksum = checksum_file(filename)
-        assert checksum == metadata['checksum'], \
-            "Wrong data checksum: {0} != {1}".format(
-                checksum, metadata["checksum"])
+        if checksum != metadata['checksum']:
+            raise DataError(
+                metadata["checksum"],
+                "Wrong data checksum: {0} != {1}".format(
+                    checksum, metadata["checksum"]))
 
         # Set file attributes.
         os.chmod(filename, metadata["mode"])

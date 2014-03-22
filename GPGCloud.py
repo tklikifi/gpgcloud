@@ -7,17 +7,24 @@ import argparse
 from operator import itemgetter
 from aws import Aws
 from config import Config, ConfigError
-from cloud import Cloud, GPGError
+from cloud import Cloud, DataError, GPGError, MetadataError
 from database import MetaDataDB
 import sys
 import time
 
 
-def error_exit(message):
+def error_exit(error):
     """
     Write error message and exit.
     """
-    sys.stderr.write("ERROR: " + message + "\n")
+    if isinstance(error, (DataError, MetadataError)):
+        error = "{0}: {1} (key: {2})".format(
+            error.__class__.__name__, str(error), error.key)
+    elif isinstance(error, GPGError):
+        error = str(error)
+    elif isinstance(error, Exception):
+        error = str(error)
+    sys.stderr.write("ERROR: " + error + "\n")
     sys.exit(1)
 
 
@@ -96,7 +103,7 @@ def main():
     try:
         config = Config(args.config)
     except ConfigError as e:
-        error_exit(str(e))
+        error_exit(e)
 
     # Initialize cloud provider.
     aws_cloud = Aws(
@@ -142,8 +149,8 @@ def main():
     elif args.command == "sync":
         try:
             cloud.sync()
-        except GPGError as e:
-            error_exit(str(e))
+        except (GPGError, MetadataError, DataError) as e:
+            error_exit(e)
         metadata_list = cloud.list()
         if len(metadata_list) == 0:
             print "No files found in cloud."
@@ -158,8 +165,8 @@ def main():
         print "Storing file:", input_file, "->", output_file
         try:
             cloud.store_from_filename(input_file, output_file)
-        except GPGError as e:
-            error_exit(str(e))
+        except (GPGError, MetadataError, DataError) as e:
+            error_exit(e)
 
     elif args.command == "retrieve":
         if not input_file:
@@ -171,8 +178,8 @@ def main():
                 print "Retrieving file:", input_file, "->", output_file
                 try:
                     cloud.retrieve_to_filename(metadata, output_file)
-                except GPGError as e:
-                    error_exit(str(e))
+                except (GPGError, MetadataError, DataError) as e:
+                    error_exit(e)
                 sys.exit(0)
         error_exit("File not found in cloud: " + input_file)
 
