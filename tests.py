@@ -1,3 +1,7 @@
+"""
+Unit tests for `GPGCloud` tool.
+"""
+
 import os
 import tempfile
 import unittest
@@ -9,7 +13,9 @@ from utils import random_string, checksum_file, checksum_data
 
 
 class TestUtils(unittest.TestCase):
-
+    """
+    Test cases for utility functions.
+    """
     def setUp(self):
         pass
 
@@ -36,7 +42,9 @@ class TestUtils(unittest.TestCase):
 
 
 class TestConfig(unittest.TestCase):
-
+    """
+    Test cases for configuration handling.
+    """
     def setUp(self):
         pass
 
@@ -119,11 +127,16 @@ class TestConfig(unittest.TestCase):
 
 
 class TestAws(unittest.TestCase):
-
+    """
+    Test cases for Amazon S3 access.
+    """
     def setUp(self):
         pass
 
     def test_aws_store_data(self):
+        """
+        Test storing data to Amazons S3, both to metadata and data buckets.
+        """
         c = Config()
         aws = Aws(c.config.get("aws", "access_key"),
                   c.config.get("aws", "secret_access_key"),
@@ -158,6 +171,9 @@ class TestAws(unittest.TestCase):
             aws.delete(key)
 
     def test_aws_store_filename(self):
+        """
+        Test storing files to Amazons S3, both to metadata and data buckets.
+        """
         c = Config()
         aws = Aws(c.config.get("aws", "access_key"),
                   c.config.get("aws", "secret_access_key"),
@@ -175,6 +191,10 @@ class TestAws(unittest.TestCase):
         aws.delete_metadata(key)
 
     def test_aws_delete_all_keys(self):
+        """
+        Test deleting all Amazons S3 keys, both from metadata and
+        data buckets.
+        """
         c = Config()
         aws = Aws(c.config.get("aws", "access_key"),
                   c.config.get("aws", "secret_access_key"),
@@ -186,11 +206,16 @@ class TestAws(unittest.TestCase):
             aws.delete(key)
 
 class TestCloud(unittest.TestCase):
-
+    """
+    Test cases for cloud access, data is encrypted and decrypted.
+    """
     def setUp(self):
         pass
 
     def test_cloud_store_data(self):
+        """
+        Store encrypted data to cloud.
+        """
         c = Config()
         aws = Aws(c.config.get("aws", "access_key"),
                   c.config.get("aws", "secret_access_key"),
@@ -218,6 +243,9 @@ class TestCloud(unittest.TestCase):
         cloud.delete(metadata2)
 
     def test_cloud_store_filename(self):
+        """
+        Store file as encrypted data to cloud.
+        """
         c = Config()
         aws = Aws(c.config.get("aws", "access_key"),
                   c.config.get("aws", "secret_access_key"),

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Main program for `GPGCloud` tool.
+Main program for `GPGBackup` tool.
 """
 
 import argparse
@@ -43,12 +43,12 @@ def parse_args():
     Parse command line arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Store and retrieve GPG encrypted files to and from "
-                    "cloud service. List files in cloud service. Delete "
+        description="Backup and restore GPG encrypted files to and from "
+                    "cloud service. List files in cloud service. Remove "
                     "files from cloud service.")
     parser.add_argument(
         '-c', '--config', type=str,
-        help="configuration file for GPGCloud",
+        help="configuration file for GPGBackup",
         default="~/.gpgcloud/gpgcloud.conf")
     parser.add_argument(
         '-v', '--verbose', help="show more verbose information",
@@ -57,33 +57,36 @@ def parse_args():
         '-V', '--version', help="show version", action="store_true")
     parser.add_argument(
         'command', type=str, nargs='?',
-        help="command to execute: list|store|retrieve|remove|sync|"
+        help="command to execute: list|backup|restore|remove|sync|"
              "list-aws-keys|list-aws-data (default: list)",
         default="list")
     parser.add_argument(
         'inputfile', type=str, nargs='?',
-        help="the name of the local file when storing file to cloud; "
-             "the name of the file in cloud when retrieving file from cloud")
+        help="the name of the local file when backing up file to cloud; "
+             "the name of the file in cloud when restoring file from cloud")
     parser.add_argument(
         'outputfile', type=str, nargs='?',
-        help="the name of the file in cloud when storing file to cloud; "
-             "the name of the local file when retrieving file from cloud")
+        help="the name of the file in cloud when backing up file to cloud; "
+             "the name of the local file when restoring file from cloud")
 
     return parser.parse_args()
 
 
 def show_files(metadata_list, verbose=False):
     if not verbose:
+        # Show header line if we are not in verbose mode.
         print "{0:<8}{1:<7}{2:<7}{3:<10}{4:<21}{5:<12}{6}".format(
             "Mode", "Uid", "Gid", "Size", "Date", "Checksum", "Path")
         print "".join('-' for i in range(78))
 
     for metadata in sorted(metadata_list, key=itemgetter('path')):
         if verbose:
+            # In verbose mode, show all details from the metadata.
             for k, v in metadata.items():
                 print "{0}: {1}".format(k.capitalize().replace('_', ' '), v)
             print
         else:
+            # Only show the information required in the header line.
             mtime = time.strftime(
                 '%Y-%m-%d %H:%M:%S',
                 time.localtime(metadata["mtime"]))
@@ -95,7 +98,7 @@ def show_files(metadata_list, verbose=False):
 
 def main():
     """
-    Main function for `GPGCloud`.
+    Main function for `GPGBackup` tool.
     """
     args = parse_args()
     if args.version:
@@ -108,7 +111,7 @@ def main():
     except ConfigError as e:
         error_exit(e)
 
-    # Initialize cloud provider.
+    # Initialize cloud provider and metadata database.
     aws_cloud = Aws(
         config.config.get("aws", "access_key"),
         config.config.get("aws", "secret_access_key"),
@@ -170,25 +173,25 @@ def main():
             sys.exit(0)
         show_files(metadata_list, args.verbose)
 
-    elif args.command == "store":
+    elif args.command == "backup":
         if not input_file:
             error_exit("Local filename not given.")
         if not output_file:
             output_file = input_file
-        print "Storing file:", input_file, "->", output_file
+        print "Backing up file:", input_file, "->", output_file
         try:
             cloud.store_from_filename(input_file, output_file)
         except (GPGError, MetadataError, DataError) as e:
             error_exit(e)
 
-    elif args.command == "retrieve":
+    elif args.command == "restore":
         if not input_file:
             error_exit("Cloud filename not given.")
         if not output_file:
             output_file = input_file
         for metadata in cloud.list():
             if metadata["path"] == input_file:
-                print "Retrieving file:", input_file, "->", output_file
+                print "Restoring file:", input_file, "->", output_file
                 try:
                     cloud.retrieve_to_filename(metadata, output_file)
                 except (GPGError, MetadataError, DataError) as e:
