@@ -120,6 +120,18 @@ class Aws(object):
 
         return keys
 
+    def list_metadata_keys(self):
+        """
+        List metadata keys in Amazon S3 cloud.
+        """
+        keys = dict()
+
+        for key in self.metadata_bucket.list():
+            k = self.metadata_bucket.lookup(key.name)
+            if k: keys[key.name] = k.__dict__
+
+        return keys
+
     def list(self):
         """
         List data in Amazon S3 cloud. Return dictionary of keys with
@@ -130,5 +142,17 @@ class Aws(object):
         for key in self.data_bucket.list():
             k = self.data_bucket.get_key(key.name)
             if k: keys[key.name] = k.get_contents_as_string()
+
+        return keys
+
+    def list_keys(self):
+        """
+        List data keys in Amazon S3 cloud.
+        """
+        keys = dict()
+
+        for key in self.data_bucket.list():
+            k = self.data_bucket.lookup(key.name)
+            if k: keys[key.name] = k.__dict__
 
         return keys

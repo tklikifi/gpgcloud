@@ -43,8 +43,9 @@ def parse_args():
     Parse command line arguments.
     """
     parser = argparse.ArgumentParser(
-        description="store and retrieve GPG encrypted data to and from "
-                    "cloud service")
+        description="Store and retrieve GPG encrypted files to and from "
+                    "cloud service. List files in cloud service. Delete "
+                    "files from cloud service.")
     parser.add_argument(
         '-c', '--config', type=str,
         help="configuration file for GPGCloud",
@@ -56,7 +57,8 @@ def parse_args():
         '-V', '--version', help="show version", action="store_true")
     parser.add_argument(
         'command', type=str, nargs='?',
-        help="command (list|store|retrieve|remove|sync) (default: list)",
+        help="command to execute: list|store|retrieve|remove|sync|"
+             "list-aws-keys|list-aws-data (default: list)",
         default="list")
     parser.add_argument(
         'inputfile', type=str, nargs='?',
@@ -131,21 +133,31 @@ def main():
             sys.exit(0)
         show_files(metadata_list, args.verbose)
 
-    elif args.command == "list-aws":
+    elif args.command == "list-aws-keys":
+        # This is a utility command to list keys in Amazon S3.
+        print "AWS metadata keys:"
+        print "=================="
+        for metadata in cloud.provider.list_metadata_keys().values():
+            print "Key: {name}\nSize: {size}\n" \
+                  "Last modified: {last_modified}\n".format(**metadata)
+        print "AWS data keys:"
+        print "=============="
+        for metadata in cloud.provider.list_keys().values():
+            print "Key: {name}\nSize: {size}\n" \
+                  "Last modified: {last_modified}\n".format(**metadata)
+
+    elif args.command == "list-aws-data":
         # This is a utility command to list raw data in Amazon S3.
         print "AWS metadata:"
         print "============="
         for k, data in cloud.provider.list_metadata().items():
             print "Key:", k
-            print "Data:"
-            print data
-
+            print "Data:", data
         print "AWS data:"
         print "========="
         for k, data in cloud.provider.list().items():
             print "Key:", k
-            print "Data:"
-            print data
+            print "Data:", data
 
     elif args.command == "sync":
         try:
