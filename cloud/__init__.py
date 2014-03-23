@@ -116,6 +116,18 @@ class Cloud(object):
 
         return metadata
 
+    def find(self, **filter):
+        """
+        Find metadata in database.
+        """
+        return self.database.find(**filter)
+
+    def find_one(self, **filter):
+        """
+        Find metadata in database.
+        """
+        return self.database.find_one(**filter)
+
     def store(self, data, cloud_filename, stat_info=None):
         """
         Encrypt data and store it to cloud.

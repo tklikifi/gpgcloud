@@ -49,7 +49,10 @@ All code MUST have unit tests.
 Functionality
 -------------
 
-TBD.
+The data must be identified only by the hash of the original data. The
+information about the available files (metadata) must be stored separately
+in cloud and locally (local database). This metadata must also be encrypted
+in cloud so that no information is revealed to cloud provider.
 
 Performance
 -----------
@@ -78,11 +81,6 @@ I, as the user of the tool, want to be able to store one file to cloud so
 that no information about where the data comes from or what the data is is
 revealed to the cloud provider.
 
-The data must be identified only by the hash of the original data. The
-information about the available files (metadata) must be stored separately
-either in cloud or locally. This metadata must also be encrypted so that no
-information is revealed to cloud provider.
-
 List available files in cloud
 -----------------------------
 
@@ -90,35 +88,40 @@ I, as the user of the tool, want to be able to list all files stored to cloud.
 It must be possible to see the metadata of the stored files, similar to `ls
 -l` output:
 
-* original file name with absolute path
-* creation and modification timestamps of the original file
+* file path in cloud
+* modification timestamp of the original file
+* creation timestamp of the original file (in verbose mode)
 * permissions of the original file
 * uid and gid of the original file
-* size of the original file
-* size of the encrypted data stored to cloud
+* size of the original file (in verbose mode)
+* size of the encrypted data in cloud
 * checksum of the original file
-* checksum of the encrypted data
+* checksum of the encrypted data (in vebose mode)
 
 Retrieve one file from the cloud
 --------------------------------
 
 I, as the user of the tool, want to be able to retrieve one file from cloud to
 local directory, either to original location or to a given location with a
-given file name. The checksum of the original file is used as the key to
-file in cloud.
+given file name.
 
 Store directory to cloud
 ------------------------
 
-TBD.
+I, as the user of the tool, want to be able to store one directory to cloud so
+that no information about where the data comes from or what the data is is
+revealed to the cloud provider. All files in the given directory are stored
+to cloud.
 
 Retrieve directory from cloud
 -----------------------------
 
-TBD.
+I, as the user of the tool, want to be able to retrieve one directory from
+cloud to local directory, either to original location or to a given location
+with a given directory name.
 
 """
 
 __author__ = "Tommi Linnakangas"
-__date__ = "2014-03-16"
-__version__ = "0.1.0"
+__date__ = "2014-03-23"
+__version__ = "0.2.0"

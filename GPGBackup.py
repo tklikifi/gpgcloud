@@ -30,10 +30,10 @@ def error_exit(error):
 
 def show_version():
     """
-    Show the version of `GPGCloud` tool.
+    Show the version of `GPGBackup` tool.
     """
     from gpgcloud import __version__
-    print "GPGCloud", __version__
+    print os.path.basename(sys.argv[0]), __version__
     sys.exit(0)
 
 
@@ -72,6 +72,10 @@ def parse_args():
 
 
 def show_files(metadata_list, verbose=False):
+    """
+    Show files stored in cloud. In verbose mode all metadata fields
+    are shown.
+    """
     if not verbose:
         # Show header line if we are not in verbose mode.
         print "{0:<8}{1:<7}{2:<7}{3:<10}{4:<21}{5:<12}{6}".format(
@@ -99,17 +103,24 @@ def backup_file(cloud, input_file, output_file):
     """
     Backup one file to cloud.
     """
+    if cloud.find_one(path=output_file):
+        return False
+
     print "Backing up file:", input_file, "->", output_file
     try:
         cloud.store_from_filename(input_file, output_file)
     except Exception as e:
         error_exit(e)
 
+    return True
 
 def backup_directory(cloud, input_file, output_file):
     """
     Backup directory to cloud.
     """
+    if cloud.find_one(path=output_file):
+        return False
+
     for root, dirnames, filenames in os.walk(input_file):
         for filename in filenames:
             filename = root + "/" + filename
@@ -119,8 +130,10 @@ def backup_directory(cloud, input_file, output_file):
                 cloud_file = os.path.normpath(output_file + "/" + filename)
             else:
                 cloud_file = filename
-            backup_file(cloud, filename, cloud_file)
+            if not backup_file(cloud, filename, cloud_file):
+                print "File already exists: {0}".format(cloud_file)
 
+    return True
 
 def main():
     """
@@ -206,10 +219,15 @@ def main():
         if not output_file:
             output_file = input_file
         if os.path.isdir(input_file):
-            backup_directory(cloud, input_file, output_file)
+            if not backup_directory(cloud, input_file, output_file):
+                print "File already exists: {0}".format(output_file)
+                sys.exit(1)
             sys.exit(0)
         elif os.path.isfile(input_file) or os.path.islink(input_file):
-            backup_file(cloud, input_file, output_file)
+            if not backup_file(cloud, input_file, output_file):
+                print "File already exists: {0}".format(output_file)
+                sys.exit(1)
+            sys.exit(0)
         else:
             error_exit("No such file or directory: '{0}'".format(input_file))
 

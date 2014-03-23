@@ -39,8 +39,14 @@ class MetaDataDB(object):
         """
         return self._metadata.all()
 
-    def find(self, **kwargs):
-        return self._metadata.find(**kwargs)
+    def find(self, **filter):
+        """
+        Find metadata in database.
+        """
+        return self._metadata.find(**filter)
 
-    def find_one(self, **kwargs):
-        return self._metadata.find_one(**kwargs)
+    def find_one(self, **filter):
+        """
+        Find metadata in database.
+        """
+        return self._metadata.find_one(**filter)
