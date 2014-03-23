@@ -156,17 +156,11 @@ def main():
 
     # Initialize cloud provider and metadata database.
     if args.provider == "aws":
-        provider = aws.Aws(
-            config.config.get("aws", "access_key"),
-            config.config.get("aws", "secret_access_key"),
-            config.config.get("aws", "data_bucket"),
-            config.config.get("aws", "metadata_bucket"))
+        provider = aws.Aws(config)
     else:
         error_exit("Unknown cloud provider: {0}".format(args.provider))
 
-    database = MetaDataDB(
-        config.config.get("general", "database"))
-    cloud = Cloud(config, provider, database)
+    cloud = Cloud(config, provider, MetaDataDB(config))
 
     input_file = None
     output_file = None
@@ -221,7 +215,6 @@ def main():
         show_files(metadata_list, args.verbose)
 
     elif args.command == "backup":
-
         if not input_file:
             error_exit("Local filename not given.")
         if not output_file:
@@ -243,7 +236,6 @@ def main():
         if not input_file:
             error_exit("Cloud filename not given.")
         input_file = os.path.normpath(input_file)
-
         if output_file:
             output_file = os.path.normpath(output_file)
 

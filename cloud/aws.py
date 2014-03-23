@@ -6,14 +6,16 @@ import boto
 import boto.exception
 import boto.s3.key
 
+from cloud import Provider
+
 
 class AwsError(Exception):
     pass
 
 
-class Aws(object):
+class Aws(Provider):
     """
-    Class for Amazon S3 cloud storage.
+    Class for Amazon S3 cloud provider.
     """
     def _create_bucket(self, bucket_name):
         """
@@ -24,23 +26,36 @@ class Aws(object):
             bucket = self.conn.create_bucket(bucket_name.lower())
         return bucket
 
-    def __init__(self, access_key, secret_access_key, data_bucket,
-                 metadata_bucket):
+    def __init__(self, config):
         """
-        Initialize Amazon S3 connection and create buckets.
+        Initialize Amazon S3 cloud provider.
         """
-        self.access_key = access_key
-        self.secret_access_key = secret_access_key
+        super(Aws, self).__init__(config)
+        self.access_key = self.config.config.get("aws", "access_key")
+        self.secret_access_key = self.config.config.get(
+            "aws", "secret_access_key")
+        self.conn = None
+
+    def connect(self):
+        """
+        Connect to Amazon S3 and create buckets.
+
+        """
+        if self.conn is not None:
+            return self
         self.conn = boto.connect_s3(self.access_key, self.secret_access_key)
         self.data_bucket = self._create_bucket(
-            access_key + '-' + data_bucket)
+            self.access_key + '-' + self.config.config.get(
+                "aws", "data_bucket"))
         self.metadata_bucket = self._create_bucket(
-            access_key + '-' + metadata_bucket)
+            self.access_key + '-' + self.config.config.get(
+                "aws", "metadata_bucket"))
+        return self
 
     @property
     def __name__(self):
         """
-        Cloud provider name as a simple string.
+        Amazon S3 cloud provider name as a simple string.
         """
         return "AmazonS3"
 
@@ -48,6 +63,7 @@ class Aws(object):
         """
         Store metadata to Amazon S3 cloud.
         """
+        assert(self.conn is not None)
         m = boto.s3.key.Key(self.metadata_bucket)
         m.key = key
         m.set_contents_from_string(metadata)
@@ -56,6 +72,7 @@ class Aws(object):
         """
         Store data to Amazon S3 cloud from data buffer.
         """
+        assert(self.conn is not None)
         k = boto.s3.key.Key(self.data_bucket)
         k.key = key
         k.set_contents_from_string(data)
@@ -64,6 +81,7 @@ class Aws(object):
         """
         Store data to Amazon S3 cloud from file.
         """
+        assert(self.conn is not None)
         k = boto.s3.key.Key(self.data_bucket)
         k.key = key
         k.set_contents_from_filename(filename)
@@ -72,6 +90,7 @@ class Aws(object):
         """
         Retrieve metadata from Amazon S3 cloud.
         """
+        assert(self.conn is not None)
         metadata = None
         m = self.metadata_bucket.get_key(key)
         if m: metadata = m.get_contents_as_string()
@@ -81,6 +100,7 @@ class Aws(object):
         """
         Retrieve data from Amazon S3 cloud. Return data as string.
         """
+        assert(self.conn is not None)
         data = None
         k = self.data_bucket.get_key(key)
         if k: data = k.get_contents_as_string()
@@ -90,6 +110,7 @@ class Aws(object):
         """
         Retrieve data from Amazon S3 cloud. Write data to file.
         """
+        assert(self.conn is not None)
         k = self.data_bucket.get_key(key)
         if k: k.get_contents_to_filename(filename)
 
@@ -97,6 +118,7 @@ class Aws(object):
         """
         Delete metadata from Amazon S3 cloud.
         """
+        assert(self.conn is not None)
         m = self.metadata_bucket.get_key(key)
         if m: m.delete()
 
@@ -104,6 +126,7 @@ class Aws(object):
         """
         Delete data from Amazon S3 cloud.
         """
+        assert(self.conn is not None)
         k = self.data_bucket.get_key(key)
         if k: k.delete()
 
@@ -112,24 +135,22 @@ class Aws(object):
         List metadata in Amazon S3 cloud. Return dictionary of keys with
         metadata.
         """
+        assert(self.conn is not None)
         keys = dict()
-
         for key in self.metadata_bucket.list():
             m = self.metadata_bucket.get_key(key.name)
             if m: keys[key.name] = m.get_contents_as_string()
-
         return keys
 
     def list_metadata_keys(self):
         """
         List metadata keys in Amazon S3 cloud.
         """
+        assert(self.conn is not None)
         keys = dict()
-
         for key in self.metadata_bucket.list():
             k = self.metadata_bucket.lookup(key.name)
             if k: keys[key.name] = k.__dict__
-
         return keys
 
     def list(self):
@@ -137,22 +158,20 @@ class Aws(object):
         List data in Amazon S3 cloud. Return dictionary of keys with
         data.
         """
+        assert(self.conn is not None)
         keys = dict()
-
         for key in self.data_bucket.list():
             k = self.data_bucket.get_key(key.name)
             if k: keys[key.name] = k.get_contents_as_string()
-
         return keys
 
     def list_keys(self):
         """
         List data keys in Amazon S3 cloud.
         """
+        assert(self.conn is not None)
         keys = dict()
-
         for key in self.data_bucket.list():
             k = self.data_bucket.lookup(key.name)
             if k: keys[key.name] = k.__dict__
-
         return keys

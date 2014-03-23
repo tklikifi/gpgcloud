@@ -46,6 +46,101 @@ class DataError(MetadataError):
     pass
 
 
+class Provider(object):
+    """
+    Base class for cloud provider.
+    """
+    def  __init__(self, config):
+        """
+        Initialize cloud provider.
+        """
+        self.config = config
+
+    @property
+    def __name__(self):
+        return "BaseProvider"
+
+    def connect(self):
+        """
+        Connect to cloud provider.
+        """
+        pass
+
+    def store_metadata(self, key, metadata):
+        """
+        Store metadata to cloud provider.
+        """
+        pass
+
+    def store(self, key, data):
+        """
+        Store data to cloud provider.
+        """
+        pass
+
+    def store_from_filename(self, key, filename):
+        """
+        Store data to cloud provider from file.
+        """
+        pass
+
+    def retrieve_metadata(self, key):
+        """
+        Retrieve metadata from cloud provider.
+        """
+        return None
+
+    def retrieve(self, key):
+        """
+        Retrieve data from cloud provider. Return data as string.
+        """
+        return None
+
+    def retrieve_to_filename(self, key, filename):
+        """
+        Retrieve data from cloud provider. Write data to file.
+        """
+        pass
+
+    def delete_metadata(self, key):
+        """
+        Delete metadata from cloud provider.
+        """
+        pass
+
+    def delete(self, key):
+        """
+        Delete data from cloud provider.
+        """
+        pass
+
+    def list_metadata(self):
+        """
+        List metadata in cloud provider. Return dictionary of keys with
+        metadata.
+        """
+        return dict()
+
+    def list_metadata_keys(self):
+        """
+        List metadata keys in cloud provider.
+        """
+        return dict()
+
+    def list(self):
+        """
+        List data in cloud provider. Return dictionary of keys with
+        data.
+        """
+        return dict()
+
+    def list_keys(self):
+        """
+        List data keys in cloud provider.
+        """
+        return dict()
+
+
 class Cloud(object):
     """
     Basic class for cloud access.
@@ -87,6 +182,8 @@ class Cloud(object):
         """
         Sync metadata database from cloud.
         """
+        self.provider.connect()
+
         self.database.drop()
         for key, encrypted_metadata in self.provider.list_metadata().items():
             metadata = gpg.decrypt(encrypted_metadata)
@@ -132,6 +229,8 @@ class Cloud(object):
         """
         Encrypt data and store it to cloud.
         """
+        self.provider.connect()
+
         key = checksum_data(data + cloud_filename)
         checksum = checksum_data(data)
         size = len(data)
@@ -172,6 +271,8 @@ class Cloud(object):
         """
         Encrypt file data and store it to cloud.
         """
+        self.provider.connect()
+
         if cloud_filename is None:
             cloud_filename = filename
 
@@ -222,6 +323,8 @@ class Cloud(object):
         """
         Retrieve data from cloud and decrypt it.
         """
+        self.provider.connect()
+
         # Get data from cloud.
         encrypted_data = self.provider.retrieve(metadata["checksum"])
         encrypted_checksum = checksum_data(encrypted_data)
@@ -247,6 +350,8 @@ class Cloud(object):
         """
         Retrieve data from cloud and decrypt it.
         """
+        self.provider.connect()
+
         if filename is None:
             filename = metadata["path"]
 
@@ -291,6 +396,8 @@ class Cloud(object):
         """
         Delete data from cloud.
         """
+        self.provider.connect()
+
         self.provider.delete_metadata(metadata["key"])
         self.database.delete(metadata["key"])
         if not self.database.find_one(checksum=metadata["checksum"]):

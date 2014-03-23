@@ -7,19 +7,20 @@ import dataset
 
 class MetaDataDB(object):
 
-    def __init__(self, database):
+    def __init__(self, config):
         """
         Initialize internal file database.
         """
-        self._db = dataset.connect(database)
-        self._metadata = self._db["metadata"]
+        self._database = dataset.connect(
+            config.config.get("general", "database"))
+        self._metadata = self._database["metadata"]
 
     def drop(self):
         """
         Drop database table and create it again.
         """
         self._metadata.drop()
-        self._metadata = self._db["metadata"]
+        self._metadata = self._database["metadata"]
 
     def update(self, metadata):
         """

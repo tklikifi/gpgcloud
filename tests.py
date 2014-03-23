@@ -136,12 +136,7 @@ class TestAws(unittest.TestCase):
         """
         Test storing data to Amazons S3, both to metadata and data buckets.
         """
-        c = Config()
-        provider = aws.Aws(
-            c.config.get("aws", "access_key"),
-            c.config.get("aws", "secret_access_key"),
-            c.config.get("aws", "data_bucket"),
-            c.config.get("aws", "metadata_bucket"))
+        provider = aws.Aws(Config()).connect()
 
         datas = dict()
         metadatas = dict()
@@ -174,12 +169,7 @@ class TestAws(unittest.TestCase):
         """
         Test storing files to Amazons S3, both to metadata and data buckets.
         """
-        c = Config()
-        provider = aws.Aws(
-            c.config.get("aws", "access_key"),
-            c.config.get("aws", "secret_access_key"),
-            c.config.get("aws", "data_bucket"),
-            c.config.get("aws", "metadata_bucket"))
+        provider = aws.Aws(Config()).connect()
         key = checksum_file("LICENSE")
         provider.store_metadata(key, "LICENSE METADATA")
         provider.store_from_filename(key, "LICENSE")
@@ -196,12 +186,7 @@ class TestAws(unittest.TestCase):
         Test deleting all Amazons S3 keys, both from metadata and
         data buckets.
         """
-        c = Config()
-        provider = aws.Aws(
-            c.config.get("aws", "access_key"),
-            c.config.get("aws", "secret_access_key"),
-            c.config.get("aws", "data_bucket"),
-            c.config.get("aws", "metadata_bucket"))
+        provider = aws.Aws(Config()).connect()
         for key, metadata in provider.list_metadata().items():
             provider.delete_metadata(key)
         for key, data in provider.list().items():
@@ -218,15 +203,11 @@ class TestCloud(unittest.TestCase):
         """
         Store encrypted data to cloud.
         """
-        c = Config()
-        provider = aws.Aws(
-            c.config.get("aws", "access_key"),
-            c.config.get("aws", "secret_access_key"),
-            c.config.get("aws", "data_bucket"),
-            c.config.get("aws", "metadata_bucket"))
-        database = MetaDataDB(c.config.get("general", "database"))
+        config = Config()
+        provider = aws.Aws(config).connect()
+        database = MetaDataDB(config)
         database.drop()
-        cloud = Cloud(c, provider, database)
+        cloud = Cloud(config, provider, database)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store(data1, "testdata/data1.txt")
@@ -263,15 +244,11 @@ class TestCloud(unittest.TestCase):
         """
         Store file as encrypted data to cloud.
         """
-        c = Config()
-        provider = aws.Aws(
-            c.config.get("aws", "access_key"),
-            c.config.get("aws", "secret_access_key"),
-            c.config.get("aws", "data_bucket"),
-            c.config.get("aws", "metadata_bucket"))
-        database = MetaDataDB(c.config.get("general", "database"))
+        config = Config()
+        provider = aws.Aws(config).connect()
+        database = MetaDataDB(config)
         database.drop()
-        cloud = Cloud(c, provider, database)
+        cloud = Cloud(config, provider, database)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store_from_filename(
