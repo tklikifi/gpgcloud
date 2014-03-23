@@ -111,10 +111,7 @@ def backup_file(cloud, input_file, output_file):
         return False
 
     print "Backing up file:", input_file, "->", output_file
-    try:
-        cloud.store_from_filename(input_file, output_file)
-    except Exception as e:
-        error_exit(e)
+    cloud.store_from_filename(input_file, output_file)
 
     return True
 
@@ -175,162 +172,143 @@ def main():
 
     exit_value = 0
 
-    if args.command == "list":
-        metadata_list = cloud.list()
-        if len(metadata_list) == 0:
-            print "No files found."
-            sys.exit(0)
-        show_files(metadata_list, args.verbose)
-
-    elif args.command == "list-cloud-keys":
-        # This is a utility command to list keys in cloud.
-        print "Cloud metadata keys:"
-        print "===================="
-        cloud.connect()
-        for metadata in cloud.provider.list_metadata_keys().values():
-            print "Key: {name}\nSize: {size}\n" \
-                  "Last modified: {last_modified}\n".format(**metadata)
-        print "Cloud data keys:"
-        print "================"
-        for metadata in cloud.provider.list_keys().values():
-            print "Key: {name}\nSize: {size}\n" \
-                  "Last modified: {last_modified}\n".format(**metadata)
-        cloud.disconnect()
-
-    elif args.command == "list-cloud-data":
-        # This is a utility command to list raw data in cloud.
-        print "Cloud metadata:"
-        print "==============="
-        cloud.connect()
-        for k, data in cloud.provider.list_metadata().items():
-            print "Key:", k
-            print "Data:", data
-        print "Cloud data:"
-        print "==========="
-        for k, data in cloud.provider.list().items():
-            print "Key:", k
-            print "Data:", data
-        cloud.disconnect()
-
-    elif args.command == "sync":
-        try:
+    try:
+        if args.command == "list":
+            metadata_list = cloud.list()
+            if len(metadata_list) == 0:
+                print "No files found."
+                sys.exit(0)
+            show_files(metadata_list, args.verbose)
+        elif args.command == "list-cloud-keys":
+            # This is a utility command to list keys in cloud.
+            print "Cloud metadata keys:"
+            print "===================="
+            cloud.connect()
+            for metadata in cloud.provider.list_metadata_keys().values():
+                print "Key: {name}\nSize: {size}\n" \
+                      "Last modified: {last_modified}\n".format(**metadata)
+            print "Cloud data keys:"
+            print "================"
+            for metadata in cloud.provider.list_keys().values():
+                print "Key: {name}\nSize: {size}\n" \
+                      "Last modified: {last_modified}\n".format(**metadata)
+            cloud.disconnect()
+        elif args.command == "list-cloud-data":
+            # This is a utility command to list raw data in cloud.
+            print "Cloud metadata:"
+            print "==============="
+            cloud.connect()
+            for k, data in cloud.provider.list_metadata().items():
+                print "Key:", k
+                print "Data:", data
+            print "Cloud data:"
+            print "==========="
+            for k, data in cloud.provider.list().items():
+                print "Key:", k
+                print "Data:", data
+            cloud.disconnect()
+        elif args.command == "sync":
             cloud.connect()
             cloud.sync()
             cloud.disconnect()
-        except (GPGError, MetadataError, DataError) as e:
-            error_exit(e)
-        metadata_list = cloud.list()
-        if len(metadata_list) == 0:
-            print "No files found."
-            sys.exit(0)
-        show_files(metadata_list, args.verbose)
-
-    elif args.command == "backup":
-        if not input_file:
-            error_exit("Local filename not given.")
-        if not output_file:
-            output_file = input_file
-        if os.path.isdir(input_file):
-            cloud.connect()
-            if not backup_directory(cloud, input_file, output_file):
-                print "File already exists: {0}".format(output_file)
-                exit_value = 1
-            cloud.disconnect()
-            sys.exit(exit_value)
-        elif os.path.isfile(input_file) or os.path.islink(input_file):
-            cloud.connect()
-            if not backup_file(cloud, input_file, output_file):
-                print "File already exists: {0}".format(output_file)
-                exit_value = 1
-            cloud.disconnect()
-            sys.exit(exit_value)
-        else:
-            error_exit("No such file or directory: '{0}'".format(input_file))
-
-    elif args.command == "restore":
-        if not input_file:
-            error_exit("Cloud filename not given.")
-        input_file = os.path.normpath(input_file)
-        if output_file:
-            output_file = os.path.normpath(output_file)
-
-        # Get the list of files.
-        cloud_list = cloud.list()
-
-        # First, check whether we have an exact match.
-        cloud.connect()
-        for metadata in cloud_list:
-            if metadata["path"] != input_file:
-                continue
+            metadata_list = cloud.list()
+            if len(metadata_list) == 0:
+                print "No files found."
+                sys.exit(0)
+            show_files(metadata_list, args.verbose)
+        elif args.command == "backup":
+            if not input_file:
+                error_exit("Local filename not given.")
             if not output_file:
                 output_file = input_file
-            print "Restoring file:", input_file, "->", output_file
-            try:
-                cloud.retrieve_to_filename(metadata, output_file)
-            except (GPGError, MetadataError, DataError) as e:
+            if os.path.isdir(input_file):
+                cloud.connect()
+                if not backup_directory(cloud, input_file, output_file):
+                    print "File already exists: {0}".format(output_file)
+                    exit_value = 1
                 cloud.disconnect()
-                error_exit(e)
-            cloud.disconnect()
-            sys.exit(0)
-
-        # Then, try to find all files, that have the same directory.
-        file_found = False
-        for metadata in cloud_list:
-            if not metadata["path"].startswith(input_file + "/"):
-                continue
-            file_found = True
-            if not output_file:
-                local_file = metadata["path"]
+                sys.exit(exit_value)
+            elif os.path.isfile(input_file) or os.path.islink(input_file):
+                cloud.connect()
+                if not backup_file(cloud, input_file, output_file):
+                    print "File already exists: {0}".format(output_file)
+                    exit_value = 1
+                cloud.disconnect()
+                sys.exit(exit_value)
             else:
-                local_file = output_file + "/" + metadata["path"]
-            print "Restoring file:", metadata["path"], "->", local_file
-            try:
-                cloud.retrieve_to_filename(metadata, local_file)
-            except (GPGError, MetadataError, DataError) as e:
+                error_exit("No such file or directory: '{0}'".format(input_file))
+        elif args.command == "restore":
+            if not input_file:
+                error_exit("Cloud filename not given.")
+            input_file = os.path.normpath(input_file)
+            if output_file:
+                output_file = os.path.normpath(output_file)
+
+            # Get the list of files.
+            cloud_list = cloud.list()
+
+            # First, check whether we have an exact match.
+            cloud.connect()
+            for metadata in cloud_list:
+                if metadata["path"] != input_file:
+                    continue
+                if not output_file:
+                    output_file = input_file
+                print "Restoring file:", input_file, "->", output_file
+                cloud.retrieve_to_filename(metadata, output_file)
                 cloud.disconnect()
-                error_exit(e)
-        cloud.disconnect()
+                sys.exit(0)
 
-        if file_found:
-            sys.exit(0)
-
-        error_exit("File not found: " + input_file)
-
-    elif args.command == "remove":
-        if not input_file:
-            error_exit("Cloud filename not given.")
-
-        # Get the list of files.
-        cloud_list = cloud.list()
-
-        # First, check whether we have an exact match.
-        cloud.connect()
-        for metadata in cloud_list:
-            if metadata["path"] != input_file:
-                continue
-            print "Removing file:", input_file
-            cloud.delete(metadata)
+            # Then, try to find all files, that have the same directory.
+            file_found = False
+            for metadata in cloud_list:
+                if not metadata["path"].startswith(input_file + "/"):
+                    continue
+                file_found = True
+                if not output_file:
+                    local_file = metadata["path"]
+                else:
+                    local_file = output_file + "/" + metadata["path"]
+                print "Restoring file:", metadata["path"], "->", local_file
+                cloud.retrieve_to_filename(metadata, local_file)
             cloud.disconnect()
-            sys.exit(0)
+            if file_found:
+                sys.exit(0)
+            error_exit("File not found: " + input_file)
+        elif args.command == "remove":
+            if not input_file:
+                error_exit("Cloud filename not given.")
 
-        # Then, try to find all files, that have the same directory.
-        file_found = False
-        for metadata in cloud_list:
-            if not metadata["path"].startswith(input_file + "/"):
-                continue
-            file_found = True
-            print "Removing file:", metadata["path"]
-            cloud.delete(metadata)
+            # Get the list of files.
+            cloud_list = cloud.list()
+
+            # First, check whether we have an exact match.
+            cloud.connect()
+            for metadata in cloud_list:
+                if metadata["path"] != input_file:
+                    continue
+                print "Removing file:", input_file
+                cloud.delete(metadata)
+                cloud.disconnect()
+                sys.exit(0)
+
+            # Then, try to find all files, that have the same directory.
+            file_found = False
+            for metadata in cloud_list:
+                if not metadata["path"].startswith(input_file + "/"):
+                    continue
+                file_found = True
+                print "Removing file:", metadata["path"]
+                cloud.delete(metadata)
+            cloud.disconnect()
+            if file_found:
+                sys.exit(0)
+            error_exit("File not found: " + input_file)
+        else:
+            error_exit("Unknown command: {0}".format(args.command))
+    except Exception as e:
         cloud.disconnect()
-
-        if file_found:
-            sys.exit(0)
-
-        error_exit("File not found: " + input_file)
-
-    else:
-        error_exit("Unknown command: {0}".format(args.command))
-
+        error_exit(e)
 
 if __name__ == "__main__":
     main()

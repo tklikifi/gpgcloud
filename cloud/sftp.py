@@ -27,12 +27,20 @@ class Sftp(Provider):
             self.connection.stat(bucket_name)
         except IOError as e:
             if e.errno != errno.ENOENT:
-                raise
-        try:
-            self.connection.mkdir(bucket_name)
-        except IOError as e:
-            if e.errno == errno.EEXIST:
-                pass
+                raise SftpError(
+                    "Could not access bucket directory: '{0}': {1}: "
+                    "Check that parent path exists and has proper "
+                    "file ownership and permissions".format(
+                        bucket_name, str(e)))
+            try:
+                self.connection.mkdir(bucket_name, mode=0700)
+            except IOError as e:
+                if e.errno != errno.EEXIST:
+                    raise SftpError(
+                        "Could not create bucket directory: '{0}': {1}: "
+                        "Check that parent path exists and has proper "
+                        "file ownership and permissions".format(
+                            bucket_name, str(e)))
         return bucket_name
 
     def __init__(self, config):
