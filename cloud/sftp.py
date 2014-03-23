@@ -75,7 +75,10 @@ class Sftp(Provider):
         """
         if self.connection is not None:
             return self
-        pkey = paramiko.RSAKey.from_private_key_file(self.identity_file)
+        try:
+            pkey = paramiko.RSAKey.from_private_key_file(self.identity_file)
+        except paramiko.SSHException:
+            pkey = paramiko.DSSKey.from_private_key_file(self.identity_file)
         self.transport = paramiko.Transport((self.host, int(self.port)))
         self.transport.connect(username=self.username, pkey=pkey)
         self.connection = paramiko.SFTPClient.from_transport(self.transport)
