@@ -5,7 +5,7 @@ Unit tests for `GPGCloud` tool.
 import os
 import tempfile
 import unittest
-from cloud import Cloud, aws
+from cloud import Cloud, amazon
 from config import Config, ConfigError
 from database import MetaDataDB
 from utils import random_string, checksum_file, checksum_data
@@ -53,14 +53,7 @@ class TestConfig(unittest.TestCase):
         """
         if os.path.isfile("test_config.conf"):
             os.remove("test_config.conf")
-        config = Config("test_config.conf")
-        self.assertIn("gnupg", config.config.sections())
-        self.assertIn("aws", config.config.sections())
-        self.assertEqual(config.config.get("gnupg", "recipients"), "")
-        self.assertEqual(config.config.get("gnupg", "signer"), "")
-        self.assertEqual(config.config.get("aws", "access_key"), "")
-        self.assertEqual(config.config.get("aws", "secret_access_key"), "")
-        os.remove("test_config.conf")
+        self.assertRaises(ConfigError, Config, "test_config.conf")
 
     def test_config_ok_config(self):
         """
@@ -70,7 +63,7 @@ class TestConfig(unittest.TestCase):
                      "recipients = tkl@iki.fi\n"
                      "signer = tommi.linnakangas@iki.fi\n"
                      "\n"
-                     "[aws]\n"
+                     "[amazon-s3]\n"
                      "access_key = ACCESSKEY\n"
                      "secret_access_key = SECRETACCESSKEY\n"
                      "data_bucket = DATABUCKET\n"
@@ -80,21 +73,20 @@ class TestConfig(unittest.TestCase):
         file("test_config.conf", "wb").write(test_data)
         config = Config("test_config.conf")
         self.assertIn("gnupg", config.config.sections())
-        self.assertIn("aws", config.config.sections())
+        self.assertIn("amazon-s3", config.config.sections())
         self.assertEqual(config.config.get(
             "gnupg", "recipients"), "tkl@iki.fi")
         self.assertEqual(config.config.get(
             "gnupg", "signer"), "tommi.linnakangas@iki.fi")
         self.assertEqual(config.config.get(
-            "aws", "access_key"), "ACCESSKEY")
+            "amazon-s3", "access_key"), "ACCESSKEY")
         self.assertEqual(config.config.get(
-            "aws", "secret_access_key"), "SECRETACCESSKEY")
+            "amazon-s3", "secret_access_key"), "SECRETACCESSKEY")
         self.assertEqual(config.config.get(
-            "aws", "data_bucket"), "DATABUCKET")
+            "amazon-s3", "data_bucket"), "DATABUCKET")
         self.assertEqual(config.config.get(
-            "aws", "metadata_bucket"), "METADATABUCKET")
+            "amazon-s3", "metadata_bucket"), "METADATABUCKET")
         os.remove("test_config.conf")
-
 
     def test_config_wrong_config(self):
         """
@@ -103,7 +95,7 @@ class TestConfig(unittest.TestCase):
         test_data_1 = ("[gnupg_missing]\n"
                        "recipients = tkl@iki.fi\n"
                        "signer = tkl@iki.fi\n"
-                       "[aws]\n"
+                       "[amazon-s3]\n"
                        "access_key = ACCESSKEY\n"
                        "secret_access_key = SECRETACCESSKEY\n"
                        "data_bucket = DATABUCKET\n"
@@ -111,7 +103,7 @@ class TestConfig(unittest.TestCase):
         test_data_2 = ("[gnupg]\n"
                        "recipients_missing = tkl@iki.fi\n"
                        "signer = tkl@iki.fi\n"
-                       "[aws]\n"
+                       "[amazon-s3]\n"
                        "access_key = ACCESSKEY\n"
                        "secret_access_key = SECRETACCESSKEY\n"
                        "data_bucket = DATABUCKET\n"
@@ -119,24 +111,28 @@ class TestConfig(unittest.TestCase):
         if os.path.isfile("test_config.conf"):
             os.remove("test_config.conf")
         file("test_config.conf", "wb").write(test_data_1)
-        self.assertRaises(ConfigError, Config, "test_config.conf")
+        config = Config("test_config.conf")
+        self.assertRaises(
+            ConfigError, config.check, "gnupg", ["recipients", "signer"])
         file("test_config.conf", "wb").write(test_data_2)
-        self.assertRaises(ConfigError, Config, "test_config.conf")
+        config = Config("test_config.conf")
+        self.assertRaises(
+            ConfigError, config.check, "gnupg", ["recipients", "signer"])
         os.remove("test_config.conf")
 
 
-class TestAws(unittest.TestCase):
+class TestAmazonS3(unittest.TestCase):
     """
     Test cases for Amazon S3 access.
     """
     def setUp(self):
         pass
 
-    def test_aws_store_data(self):
+    def test_amazon_s3_store_data(self):
         """
         Test storing data to Amazons S3, both to metadata and data buckets.
         """
-        provider = aws.Aws(Config()).connect()
+        provider = amazon.S3(Config()).connect()
 
         datas = dict()
         metadatas = dict()
@@ -165,11 +161,11 @@ class TestAws(unittest.TestCase):
         for key, data in datas.items():
             provider.delete(key)
 
-    def test_aws_store_filename(self):
+    def test_amazon_s3_store_filename(self):
         """
         Test storing files to Amazons S3, both to metadata and data buckets.
         """
-        provider = aws.Aws(Config()).connect()
+        provider = amazon.S3(Config()).connect()
         key = checksum_file("LICENSE")
         provider.store_metadata(key, "LICENSE METADATA")
         provider.store_from_filename(key, "LICENSE")
@@ -181,12 +177,12 @@ class TestAws(unittest.TestCase):
         provider.delete(key)
         provider.delete_metadata(key)
 
-    def test_aws_delete_all_keys(self):
+    def test_amazon_s3_delete_all_keys(self):
         """
         Test deleting all Amazons S3 keys, both from metadata and
         data buckets.
         """
-        provider = aws.Aws(Config()).connect()
+        provider = amazon.S3(Config()).connect()
         for key, metadata in provider.list_metadata().items():
             provider.delete_metadata(key)
         for key, data in provider.list().items():
@@ -204,7 +200,7 @@ class TestCloud(unittest.TestCase):
         Store encrypted data to cloud.
         """
         config = Config()
-        provider = aws.Aws(config).connect()
+        provider = amazon.S3(config).connect()
         database = MetaDataDB(config)
         database.drop()
         cloud = Cloud(config, provider, database)
@@ -245,7 +241,7 @@ class TestCloud(unittest.TestCase):
         Store file as encrypted data to cloud.
         """
         config = Config()
-        provider = aws.Aws(config).connect()
+        provider = amazon.S3(config).connect()
         database = MetaDataDB(config)
         database.drop()
         cloud = Cloud(config, provider, database)

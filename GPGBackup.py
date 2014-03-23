@@ -6,7 +6,7 @@ Main program for `GPGBackup` tool.
 import argparse
 from operator import itemgetter
 from config import Config, ConfigError
-from cloud import aws, Cloud, DataError, GPGError, MetadataError
+from cloud import amazon, Cloud, DataError, GPGError, MetadataError
 from database import MetaDataDB
 import os
 import sys
@@ -50,8 +50,8 @@ def parse_args():
         default="~/.gpgcloud/gpgcloud.conf")
     parser.add_argument(
         '-p', '--provider', type=str,
-        help="cloud provider for GPGBackup (default: aws)",
-        default="aws")
+        help="cloud provider for GPGBackup (default: amazon-s3)",
+        default="amazon-s3")
     parser.add_argument(
         '-v', '--verbose', help="show more verbose information",
         action="store_true")
@@ -155,8 +155,8 @@ def main():
         error_exit(e)
 
     # Initialize cloud provider and metadata database.
-    if args.provider == "aws":
-        provider = aws.Aws(config)
+    if args.provider == "amazon-s3":
+        provider = amazon.S3(config)
     else:
         error_exit("Unknown cloud provider: {0}".format(args.provider))
 
@@ -181,6 +181,7 @@ def main():
         # This is a utility command to list keys in cloud.
         print "Cloud metadata keys:"
         print "===================="
+        cloud.provider.connect()
         for metadata in cloud.provider.list_metadata_keys().values():
             print "Key: {name}\nSize: {size}\n" \
                   "Last modified: {last_modified}\n".format(**metadata)
@@ -194,6 +195,7 @@ def main():
         # This is a utility command to list raw data in cloud.
         print "Cloud metadata:"
         print "==============="
+        cloud.provider.connect()
         for k, data in cloud.provider.list_metadata().items():
             print "Key:", k
             print "Data:", data

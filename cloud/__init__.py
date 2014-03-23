@@ -55,10 +55,12 @@ class Provider(object):
         Initialize cloud provider.
         """
         self.config = config
+        self.config.check("general", ["database"])
+        self.config.check("gnupg", ["recipients", "signer"])
 
     @property
     def __name__(self):
-        return "BaseProvider"
+        return "cloud-provider"
 
     def connect(self):
         """

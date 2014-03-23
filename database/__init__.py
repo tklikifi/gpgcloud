@@ -11,8 +11,9 @@ class MetaDataDB(object):
         """
         Initialize internal file database.
         """
+        self.config = config
         self._database = dataset.connect(
-            config.config.get("general", "database"))
+            self.config.config.get("general", "database"))
         self._metadata = self._database["metadata"]
 
     def drop(self):
