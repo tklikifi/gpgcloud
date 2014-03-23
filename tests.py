@@ -5,8 +5,7 @@ Unit tests for `GPGCloud` tool.
 import os
 import tempfile
 import unittest
-from aws import Aws
-from cloud import Cloud
+from cloud import Cloud, aws
 from config import Config, ConfigError
 from database import MetaDataDB
 from utils import random_string, checksum_file, checksum_data
@@ -138,10 +137,11 @@ class TestAws(unittest.TestCase):
         Test storing data to Amazons S3, both to metadata and data buckets.
         """
         c = Config()
-        aws = Aws(c.config.get("aws", "access_key"),
-                  c.config.get("aws", "secret_access_key"),
-                  c.config.get("aws", "data_bucket"),
-                  c.config.get("aws", "metadata_bucket"))
+        provider = aws.Aws(
+            c.config.get("aws", "access_key"),
+            c.config.get("aws", "secret_access_key"),
+            c.config.get("aws", "data_bucket"),
+            c.config.get("aws", "metadata_bucket"))
 
         datas = dict()
         metadatas = dict()
@@ -149,46 +149,47 @@ class TestAws(unittest.TestCase):
         for data, metadata in (("Data 1", "Metadata 1"),
                                ("Data 2", "Metadata 2")):
             key = checksum_data(data)
-            aws.store_metadata(key, metadata)
-            aws.store(key, data)
-            new_metadata = aws.retrieve_metadata(key)
-            new_data = aws.retrieve(key)
+            provider.store_metadata(key, metadata)
+            provider.store(key, data)
+            new_metadata = provider.retrieve_metadata(key)
+            new_data = provider.retrieve(key)
             self.assertEqual(new_data, data)
             self.assertEqual(new_metadata, metadata)
             datas[key] = data
             metadatas[key] = metadata
 
-        for key, metadata in aws.list_metadata().items():
+        for key, metadata in provider.list_metadata().items():
             self.assertEqual(metadata, metadatas[key])
 
-        for key, data in aws.list().items():
+        for key, data in provider.list().items():
             self.assertEqual(data, datas[key])
 
         for key, metadata in metadatas.items():
-            aws.delete_metadata(key)
+            provider.delete_metadata(key)
 
         for key, data in datas.items():
-            aws.delete(key)
+            provider.delete(key)
 
     def test_aws_store_filename(self):
         """
         Test storing files to Amazons S3, both to metadata and data buckets.
         """
         c = Config()
-        aws = Aws(c.config.get("aws", "access_key"),
-                  c.config.get("aws", "secret_access_key"),
-                  c.config.get("aws", "data_bucket"),
-                  c.config.get("aws", "metadata_bucket"))
+        provider = aws.Aws(
+            c.config.get("aws", "access_key"),
+            c.config.get("aws", "secret_access_key"),
+            c.config.get("aws", "data_bucket"),
+            c.config.get("aws", "metadata_bucket"))
         key = checksum_file("LICENSE")
-        aws.store_metadata(key, "LICENSE METADATA")
-        aws.store_from_filename(key, "LICENSE")
+        provider.store_metadata(key, "LICENSE METADATA")
+        provider.store_from_filename(key, "LICENSE")
         t = tempfile.NamedTemporaryFile()
-        metadata = aws.retrieve_metadata(key)
-        aws.retrieve_to_filename(key, t.name)
+        metadata = provider.retrieve_metadata(key)
+        provider.retrieve_to_filename(key, t.name)
         self.assertEqual(file("LICENSE").read(), file(t.name).read())
         self.assertEqual("LICENSE METADATA", metadata)
-        aws.delete(key)
-        aws.delete_metadata(key)
+        provider.delete(key)
+        provider.delete_metadata(key)
 
     def test_aws_delete_all_keys(self):
         """
@@ -196,14 +197,15 @@ class TestAws(unittest.TestCase):
         data buckets.
         """
         c = Config()
-        aws = Aws(c.config.get("aws", "access_key"),
-                  c.config.get("aws", "secret_access_key"),
-                  c.config.get("aws", "data_bucket"),
-                  c.config.get("aws", "metadata_bucket"))
-        for key, metadata in aws.list_metadata().items():
-            aws.delete_metadata(key)
-        for key, data in aws.list().items():
-            aws.delete(key)
+        provider = aws.Aws(
+            c.config.get("aws", "access_key"),
+            c.config.get("aws", "secret_access_key"),
+            c.config.get("aws", "data_bucket"),
+            c.config.get("aws", "metadata_bucket"))
+        for key, metadata in provider.list_metadata().items():
+            provider.delete_metadata(key)
+        for key, data in provider.list().items():
+            provider.delete(key)
 
 class TestCloud(unittest.TestCase):
     """
@@ -217,13 +219,14 @@ class TestCloud(unittest.TestCase):
         Store encrypted data to cloud.
         """
         c = Config()
-        aws = Aws(c.config.get("aws", "access_key"),
-                  c.config.get("aws", "secret_access_key"),
-                  c.config.get("aws", "data_bucket"),
-                  c.config.get("aws", "metadata_bucket"))
+        provider = aws.Aws(
+            c.config.get("aws", "access_key"),
+            c.config.get("aws", "secret_access_key"),
+            c.config.get("aws", "data_bucket"),
+            c.config.get("aws", "metadata_bucket"))
         database = MetaDataDB(c.config.get("general", "database"))
         database.drop()
-        cloud = Cloud(c, aws, database)
+        cloud = Cloud(c, provider, database)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store(data1, "testdata/data1.txt")
@@ -261,13 +264,14 @@ class TestCloud(unittest.TestCase):
         Store file as encrypted data to cloud.
         """
         c = Config()
-        aws = Aws(c.config.get("aws", "access_key"),
-                  c.config.get("aws", "secret_access_key"),
-                  c.config.get("aws", "data_bucket"),
-                  c.config.get("aws", "metadata_bucket"))
+        provider = aws.Aws(
+            c.config.get("aws", "access_key"),
+            c.config.get("aws", "secret_access_key"),
+            c.config.get("aws", "data_bucket"),
+            c.config.get("aws", "metadata_bucket"))
         database = MetaDataDB(c.config.get("general", "database"))
         database.drop()
-        cloud = Cloud(c, aws, database)
+        cloud = Cloud(c, provider, database)
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store_from_filename(

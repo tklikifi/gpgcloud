@@ -5,9 +5,8 @@ Main program for `GPGBackup` tool.
 
 import argparse
 from operator import itemgetter
-from aws import Aws
 from config import Config, ConfigError
-from cloud import Cloud, DataError, GPGError, MetadataError
+from cloud import aws, Cloud, DataError, GPGError, MetadataError
 from database import MetaDataDB
 import os
 import sys
@@ -50,6 +49,10 @@ def parse_args():
         help="configuration file for GPGBackup",
         default="~/.gpgcloud/gpgcloud.conf")
     parser.add_argument(
+        '-p', '--provider', type=str,
+        help="cloud provider for GPGBackup (default: aws)",
+        default="aws")
+    parser.add_argument(
         '-v', '--verbose', help="show more verbose information",
         action="store_true")
     parser.add_argument(
@@ -57,7 +60,7 @@ def parse_args():
     parser.add_argument(
         'command', type=str, nargs='?',
         help="command to execute: list|backup|restore|remove|sync|"
-             "list-aws-keys|list-aws-data (default: list)",
+             "list-cloud-keys|list-cloud-data (default: list)",
         default="list")
     parser.add_argument(
         'inputfile', type=str, nargs='?',
@@ -144,6 +147,7 @@ def main():
         show_version()
 
     config = None
+    provider = None
 
     try:
         config = Config(args.config)
@@ -151,14 +155,18 @@ def main():
         error_exit(e)
 
     # Initialize cloud provider and metadata database.
-    aws_cloud = Aws(
-        config.config.get("aws", "access_key"),
-        config.config.get("aws", "secret_access_key"),
-        config.config.get("aws", "data_bucket"),
-        config.config.get("aws", "metadata_bucket"))
+    if args.provider == "aws":
+        provider = aws.Aws(
+            config.config.get("aws", "access_key"),
+            config.config.get("aws", "secret_access_key"),
+            config.config.get("aws", "data_bucket"),
+            config.config.get("aws", "metadata_bucket"))
+    else:
+        error_exit("Unknown cloud provider: {0}".format(args.provider))
+
     database = MetaDataDB(
         config.config.get("general", "database"))
-    cloud = Cloud(config, aws_cloud, database)
+    cloud = Cloud(config, provider, database)
 
     input_file = None
     output_file = None
@@ -175,28 +183,28 @@ def main():
             sys.exit(0)
         show_files(metadata_list, args.verbose)
 
-    elif args.command == "list-aws-keys":
-        # This is a utility command to list keys in Amazon S3.
-        print "AWS metadata keys:"
-        print "=================="
+    elif args.command == "list-cloud-keys":
+        # This is a utility command to list keys in cloud.
+        print "Cloud metadata keys:"
+        print "===================="
         for metadata in cloud.provider.list_metadata_keys().values():
             print "Key: {name}\nSize: {size}\n" \
                   "Last modified: {last_modified}\n".format(**metadata)
-        print "AWS data keys:"
-        print "=============="
+        print "Cloud data keys:"
+        print "================"
         for metadata in cloud.provider.list_keys().values():
             print "Key: {name}\nSize: {size}\n" \
                   "Last modified: {last_modified}\n".format(**metadata)
 
-    elif args.command == "list-aws-data":
-        # This is a utility command to list raw data in Amazon S3.
-        print "AWS metadata:"
-        print "============="
+    elif args.command == "list-cloud-data":
+        # This is a utility command to list raw data in cloud.
+        print "Cloud metadata:"
+        print "==============="
         for k, data in cloud.provider.list_metadata().items():
             print "Key:", k
             print "Data:", data
-        print "AWS data:"
-        print "========="
+        print "Cloud data:"
+        print "==========="
         for k, data in cloud.provider.list().items():
             print "Key:", k
             print "Data:", data
