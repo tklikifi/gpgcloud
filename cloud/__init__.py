@@ -68,6 +68,12 @@ class Provider(object):
         """
         pass
 
+    def disconnect(self):
+        """
+        Disconnect from cloud provider.
+        """
+        pass
+
     def store_metadata(self, key, metadata):
         """
         Store metadata to cloud provider.
@@ -180,12 +186,23 @@ class Cloud(object):
             metadata["encrypted_checksum"] = encrypted_checksum
         return metadata
 
+    def connect(self):
+        """
+        Open connection to cloud.
+        """
+        self.provider.connect()
+        return self
+
+    def disconnect(self):
+        """
+        Close cloud connection.
+        """
+        self.provider.disconnect()
+
     def sync(self):
         """
         Sync metadata database from cloud.
         """
-        self.provider.connect()
-
         self.database.drop()
         for key, encrypted_metadata in self.provider.list_metadata().items():
             metadata = gpg.decrypt(encrypted_metadata)
@@ -231,8 +248,6 @@ class Cloud(object):
         """
         Encrypt data and store it to cloud.
         """
-        self.provider.connect()
-
         key = checksum_data(data + cloud_filename)
         checksum = checksum_data(data)
         size = len(data)
@@ -273,8 +288,6 @@ class Cloud(object):
         """
         Encrypt file data and store it to cloud.
         """
-        self.provider.connect()
-
         if cloud_filename is None:
             cloud_filename = filename
 
@@ -325,8 +338,6 @@ class Cloud(object):
         """
         Retrieve data from cloud and decrypt it.
         """
-        self.provider.connect()
-
         # Get data from cloud.
         encrypted_data = self.provider.retrieve(metadata["checksum"])
         encrypted_checksum = checksum_data(encrypted_data)
@@ -352,8 +363,6 @@ class Cloud(object):
         """
         Retrieve data from cloud and decrypt it.
         """
-        self.provider.connect()
-
         if filename is None:
             filename = metadata["path"]
 
@@ -398,8 +407,6 @@ class Cloud(object):
         """
         Delete data from cloud.
         """
-        self.provider.connect()
-
         self.provider.delete_metadata(metadata["key"])
         self.database.delete(metadata["key"])
         if not self.database.find_one(checksum=metadata["checksum"]):

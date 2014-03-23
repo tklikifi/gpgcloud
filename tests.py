@@ -1,11 +1,11 @@
 """
-Unit tests for `GPGCloud` tool.
+Unit tests for `GPGCloud` project.
 """
 
 import os
 import tempfile
 import unittest
-from cloud import Cloud, amazon
+from cloud import Cloud, amazon, sftp
 from config import Config, ConfigError
 from database import MetaDataDB
 from utils import random_string, checksum_file, checksum_data
@@ -148,18 +148,15 @@ class TestAmazonS3(unittest.TestCase):
             self.assertEqual(new_metadata, metadata)
             datas[key] = data
             metadatas[key] = metadata
-
         for key, metadata in provider.list_metadata().items():
             self.assertEqual(metadata, metadatas[key])
-
         for key, data in provider.list().items():
             self.assertEqual(data, datas[key])
-
         for key, metadata in metadatas.items():
             provider.delete_metadata(key)
-
         for key, data in datas.items():
             provider.delete(key)
+        provider.disconnect()
 
     def test_amazon_s3_store_filename(self):
         """
@@ -176,6 +173,7 @@ class TestAmazonS3(unittest.TestCase):
         self.assertEqual("LICENSE METADATA", metadata)
         provider.delete(key)
         provider.delete_metadata(key)
+        provider.disconnect()
 
     def test_amazon_s3_delete_all_keys(self):
         """
@@ -187,6 +185,74 @@ class TestAmazonS3(unittest.TestCase):
             provider.delete_metadata(key)
         for key, data in provider.list().items():
             provider.delete(key)
+        provider.disconnect()
+
+class TestSftp(unittest.TestCase):
+    """
+    Test cases for SFTP filesystem.
+    """
+    def setUp(self):
+        pass
+
+    def test_sftp_store_data(self):
+        """
+        Test storing data to filesystem, both to metadata and data buckets.
+        """
+        provider = sftp.Sftp(Config()).connect()
+
+        datas = dict()
+        metadatas = dict()
+
+        for data, metadata in (("Data 1", "Metadata 1"),
+                               ("Data 2", "Metadata 2")):
+            key = checksum_data(data)
+            provider.store_metadata(key, metadata)
+            provider.store(key, data)
+            new_metadata = provider.retrieve_metadata(key)
+            new_data = provider.retrieve(key)
+            self.assertEqual(new_data, data)
+            self.assertEqual(new_metadata, metadata)
+            datas[key] = data
+            metadatas[key] = metadata
+        for key, metadata in provider.list_metadata().items():
+            self.assertEqual(metadata, metadatas[key])
+        for key, data in provider.list().items():
+            self.assertEqual(data, datas[key])
+        for key, metadata in metadatas.items():
+            provider.delete_metadata(key)
+        for key, data in datas.items():
+            provider.delete(key)
+        provider.disconnect()
+
+    def test_sftp_store_filename(self):
+        """
+        Test storing files to SFTP filesystem, both to metadata and data
+        buckets.
+        """
+        provider = sftp.Sftp(Config()).connect()
+        key = checksum_file("LICENSE")
+        provider.store_metadata(key, "LICENSE METADATA")
+        provider.store_from_filename(key, "LICENSE")
+        t = tempfile.NamedTemporaryFile()
+        metadata = provider.retrieve_metadata(key)
+        provider.retrieve_to_filename(key, t.name)
+        self.assertEqual(file("LICENSE").read(), file(t.name).read())
+        self.assertEqual("LICENSE METADATA", metadata)
+        provider.delete(key)
+        provider.delete_metadata(key)
+        provider.disconnect()
+
+    def test_sftp_delete_all_keys(self):
+        """
+        Test deleting all filesystem keys, both from metadata and
+        data buckets.
+        """
+        provider = sftp.Sftp(Config()).connect()
+        for key, metadata in provider.list_metadata().items():
+            provider.delete_metadata(key)
+        for key, data in provider.list().items():
+            provider.delete(key)
+        provider.disconnect()
 
 class TestCloud(unittest.TestCase):
     """
@@ -195,15 +261,13 @@ class TestCloud(unittest.TestCase):
     def setUp(self):
         pass
 
-    def test_cloud_store_data(self):
+    def _test_cloud_store_data(self, config, provider):
         """
         Store encrypted data to cloud.
         """
-        config = Config()
-        provider = amazon.S3(config).connect()
         database = MetaDataDB(config)
         database.drop()
-        cloud = Cloud(config, provider, database)
+        cloud = Cloud(config, provider, database).connect()
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store(data1, "testdata/data1.txt")
@@ -235,16 +299,23 @@ class TestCloud(unittest.TestCase):
         cloud.delete(metadata2)
         cloud.delete(metadata3)
         cloud.delete(metadata4)
+        cloud.disconnect()
 
-    def test_cloud_store_filename(self):
+    def test_cloud_amazon_s3_store_data(self):
+        config = Config()
+        self._test_cloud_store_data(config, amazon.S3(config))
+
+    def test_cloud_sftp_store_data(self):
+        config = Config()
+        self._test_cloud_store_data(config, sftp.Sftp(config))
+
+    def _test_cloud_store_filename(self, config, provider):
         """
         Store file as encrypted data to cloud.
         """
-        config = Config()
-        provider = amazon.S3(config).connect()
         database = MetaDataDB(config)
         database.drop()
-        cloud = Cloud(config, provider, database)
+        cloud = Cloud(config, provider, database).connect()
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store_from_filename(
@@ -285,10 +356,19 @@ class TestCloud(unittest.TestCase):
         cloud.delete(metadata2)
         cloud.delete(metadata3)
         cloud.delete(metadata4)
+        cloud.disconnect()
         os.remove("testdata/new_data1.txt")
         os.remove("testdata/new_data2.txt")
         os.remove("testdata/new_data3.txt")
         os.remove("testdata/new_data4.txt")
+
+    def test_cloud_amazon_s3_store_filename(self):
+        config = Config()
+        self._test_cloud_store_filename(config, amazon.S3(config))
+
+    def test_cloud_sftp_store_filename(self):
+        config = Config()
+        self._test_cloud_store_filename(config, sftp.Sftp(config))
 
 
 if __name__ == "__main__":

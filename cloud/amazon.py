@@ -51,7 +51,6 @@ class S3(Provider):
     def connect(self):
         """
         Connect to Amazon S3 and create buckets.
-
         """
         if self.connection is not None:
             return self
@@ -64,6 +63,12 @@ class S3(Provider):
             self.access_key + '-' + self.config.config.get(
                 "amazon-s3", "metadata_bucket"))
         return self
+
+    def disconnect(self):
+        """
+        Disconnect from Amazon S3.
+        """
+        self.connection = None
 
     def store_metadata(self, key, metadata):
         """
