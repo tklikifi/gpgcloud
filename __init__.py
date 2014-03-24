@@ -1,14 +1,16 @@
 """
-Utility to store GPG encrypted data into Amazon S3 cloud.
+Utility to store GPG encrypted data into cloud environments.
 
-GPGCloud is a simple tool to store encrypted data into Amazon S3 cloud.
-The main focus of the tool is to use secure storage in the cloud: all data
-is encrypted and no information about what kind of data is stored is revealed
-to cloud provider.
+GPGCloud is a simple tool to store encrypted data into different cloud
+environments. The main focus of the tool is to use secure storage in the
+cloud: all data is encrypted and no information about what kind of data is
+stored is revealed to cloud provider.
 
 The security and privacy of the data is based on GPG encryption, which is
 performed outside the cloud environment. You MUST keep your GPG keyring safe,
 otherwise your data is not safe either.
+
+Currently Amazon S3 clouds and SFTP filesystems are supported.
 
 Requirements
 ============
@@ -31,13 +33,20 @@ Dependencies
 GPG must be installed. The current version of `gpgcloud` is developed
 and tested using:
 
-* gpg (GnuPG/MacGPG2) 2.0.22 (libgcrypt 1.5.3).
+* Python-2.7.5
+* gpg (GnuPG/MacGPG2) 2.0.22 (libgcrypt 1.5.3)
+* gpg-agent (GnuPG/MacGPG2) 2.0.22 (libgcrypt 1.5.3)
 
-Also the following Python modules must be installed:
+The following Python modules (and their dependencies) must be installed:
 
 * boto==2.27.0
 * dataset==0.5.2
+* paramiko==1.13.0
 * python_gnupg==0.3.6
+
+Run the following command to install all necessary Python modules:
+
+`pip install -r requirements.txt`
 
 Quality
 -------
