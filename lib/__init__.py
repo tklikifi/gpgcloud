@@ -1,5 +1,5 @@
 """
-Utility module for `gpgcloud`.
+Library module for `gpgcloud`.
 """
 
 import hashlib

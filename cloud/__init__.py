@@ -9,7 +9,8 @@ import json
 import os
 import tempfile
 
-from utils import checksum_data, checksum_file
+from lib import checksum_data, checksum_file
+from lib.encryption import generate_random_password
 
 
 METADATA_VERSION = 1

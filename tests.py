@@ -8,7 +8,7 @@ import unittest
 from cloud import Cloud, amazon, sftp
 from config import Config, ConfigError
 from database import MetaDataDB
-from utils import random_string, checksum_file, checksum_data
+from lib import random_string, checksum_file, checksum_data
 
 
 class TestUtils(unittest.TestCase):

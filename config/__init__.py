@@ -2,28 +2,26 @@
 Handle configurations. Configuration file format is basic python config
 file. Example configuration file:
 
-<pre>
-[general]
-database = sqlite:////home/tkl/.gpgcloud/metadata.db
+    [general]
+    database = sqlite:////home/tkl/.gpgcloud/metadata.db
 
-[gnupg]
-recipients = tkl@iki.fi
-signer = tkl@iki.fi
+    [gnupg]
+    recipients = tkl@iki.fi
+    signer = tkl@iki.fi
 
-[amazon-s3]
-access_key = ACCESSKEY
-secret_access_key = SECRETACCESSKEY
-data_bucket = DATABUCKET
-metadata_bucket = METADATABUCKET
+    [amazon-s3]
+    access_key = ACCESSKEY
+    secret_access_key = SECRETACCESSKEY
+    data_bucket = DATABUCKET
+    metadata_bucket = METADATABUCKET
 
-[sftp]
-host = localhost
-port = 22
-username = tkl
-identity_file = /home/tkl/.ssh/testkey
-data_bucket = /home/tkl/GPGCloud/backup/DATABUCKET
-metadata_bucket = /home/tkl/GPGCloud/backup/METADATABUCKET
-</pre>
+    [sftp]
+    host = localhost
+    port = 22
+    username = tkl
+    identity_file = /home/tkl/.ssh/testkey
+    data_bucket = /home/tkl/GPGCloud/backup/DATABUCKET
+    metadata_bucket = /home/tkl/GPGCloud/backup/METADATABUCKET
 """
 
 import ConfigParser
