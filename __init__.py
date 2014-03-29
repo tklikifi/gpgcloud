@@ -94,42 +94,42 @@ data are encrypted and signed using GPG:
 
    digraph G {
 
+     node [fontname="helvetica-bold", fontsize=12];
+
      subgraph cluster_host {
        "File" [shape="box"];
-       "Create metadata" [label="Create\\nmetadata", shape="circle"];
+       "Create metadata" [label="Create metadata"];
        "Metadata" [shape="box"];
-       "GPG data" [label="Use GPG to\\nencrypt and\\nsign data",
-       shape="circle"];
-       "GPG metadata" [label="Use GPG\\nto encrypt\\nand sign\\nmetadata",
-       shape="circle"];
-       "Store metadata to database" [label="Store\\nmetadata\\nto\\ndatabase",
-       shape="circle"];
+       "GPG data" [label="Use GPG to encrypt\\nand sign data"];
+       "GPG metadata" [label="Use GPG to encrypt\\nand sign metadata"];
+       "Store metadata to database" [label="Store metadata\\nto database"];
        "Database" [shape="box"];
-       "Encrypted data" [label="Encrypted\\nfile data\\nand\\nchecksums",
+       "Encrypted data" [label="Encrypted file data\\nand checksums",
        shape="box"];
-       "Store checksums to metadata" [label="Store\\nchecksums\\nto metadata",
-       shape="circle"];
-       "Encrypted metadata" [label="Encrypted\\nmetadata", shape="box"];
-       "Store data" [label="Store data\\nto cloud", shape="circle"];
-       "Store metadata" [label="Store\\nmetadata\\nto cloud", shape="circle"];
+       "Store checksums to metadata" [label="Store checksums\\nto metadata"];
+       "Encrypted metadata" [label="Encrypted metadata", shape="box"];
+       "Store data" [label="Store data to cloud"];
+       "Store metadata" [label="Store metadata to cloud"];
        label="User host";
+       fontname="helvetica-bold";
+       fontsize=16;
      }
 
      subgraph cluster_s3 {
        "Data bucket" [shape="box"];
        "Metadata bucket" [shape="box"];
        label="Amazon S3";
+       fontname="helvetica-bold";
+       fontsize=16;
      }
 
      "File" -> "Create metadata" -> "Metadata" ->
        "Store metadata to database" -> "Database";
      "Metadata" -> "GPG metadata" -> "Encrypted metadata" ->
      "Store metadata";
-     "Store metadata" -> "Metadata bucket"
-     [label="Checksum\\nof plaintext\\nappended with\\nfile path\\nis the key\\nto bucket"];
+     "Store metadata" -> "Metadata bucket";
      "File" -> "GPG data" -> "Encrypted data" -> "Store data";
-     "Store data" -> "Data bucket"
-     [label="Checksum\\nof plaintext\\nis the key\\nto bucket"];
+     "Store data" -> "Data bucket";
      "Encrypted data" -> "Store checksums to metadata" -> "Metadata";
    }
 
