@@ -1,7 +1,7 @@
 """
 Utility to store GPG encrypted data into cloud environments.
 
-GPGCloud is a simple tool to store encrypted data into different cloud
+GPGCloud is a system to store encrypted data into different cloud
 environments. The main focus of the tool is to use secure storage in the
 cloud: all data is encrypted and no information about what kind of data is
 stored is revealed to cloud provider.
@@ -19,19 +19,19 @@ The main requirements for the tool are described below.
 
 Security and privacy
 --------------------
-1. Data MUST always be encrypted before it is stored into cloud.
-2. Information about the data MUST NOT be revealed to cloud provider.
-3. Encryption keys MUST NOT be stored to cloud.
-4. Encryption keys MUST be protected by passphrase.
-5. Data MUST be encrypted using `AES-256` algorithm.
-6. All checksums MUST be calculated using `SHA-256` algorithm.
-7. All temporary files created locally MUST be protected with `0600`
+1. Data **MUST** always be encrypted before it is stored into cloud.
+2. Information about the data **MUST NOT** be revealed to cloud provider.
+3. Encryption keys **MUST NOT** be stored to cloud.
+4. Encryption keys **MUST** be protected by passphrase.
+5. Data MUST be encrypted using **AES-256** algorithm.
+6. All checksums MUST be calculated using **SHA-256** algorithm.
+7. All temporary files created locally MUST be protected with **0600**
    permissions.
 
 Dependencies
 ------------
-GPG must be installed. The current version of `gpgcloud` is developed
-and tested using:
+GPG must be installed. The current version of GPGCloud is developed and
+tested using:
 
 * Python-2.7.5
 * gpg (GnuPG/MacGPG2) 2.0.22 (libgcrypt 1.5.3)
@@ -39,21 +39,18 @@ and tested using:
 
 The following Python modules (and their dependencies) must be installed:
 
-* boto==2.27.0
-* dataset==0.5.2
-* paramiko==1.13.0
-* python_gnupg==0.3.6
+.. literalinclude:: ../requirements.txt
 
 Run the following command to install all necessary Python modules:
 
-`pip install -r requirements.txt`
+``pip install -r requirements.txt``
 
 Quality
 -------
-Test Driver Development (TDD) MUST be practiced. Before new functionality
+Test Driver Development (TDD) **MUST** be practiced. Before new functionality
 is written test code (unit tests) must be written first.
 
-All code MUST have unit tests.
+All code **MUST** have unit tests.
 
 Functionality
 -------------
@@ -76,7 +73,127 @@ TBD.
 Architecture
 ============
 
-TBD.
+Store data to cloud
+-------------------
+
+Use GPG to encrypt and sign both metadata and data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following flow chart describes the mode where both metadata and file
+data are encrypted and signed using GPG:
+
+.. graphviz::
+
+   digraph G {
+
+     node [shape="box"];
+
+     subgraph cluster_host {
+       "file" [label="File"];
+       "metadata" [label="Create\\nmetadata"];
+       "gpg" [label="Use GPG to\\nencrypt and\\nsign data"];
+       "database" [label="Store metadata\\nto local\\ndatabase"];
+       label="User host";
+     }
+
+     subgraph cluster_s3 {
+       "data_bucket" [label="Data\\nBucket"];
+       "metadata_bucket" [label="Metadata\\nBucket"];
+       label="Amazon S3";
+     }
+
+     "file" -> "metadata" [label="file data"];
+     "metadata" -> "database" [label="metadata"];
+     "file" -> "gpg" [label="file data"];
+     "metadata" -> "gpg" [label="metadata"];
+     "gpg" -> "metadata_bucket" [label="encrypted\\nand\\nsigned\\nmetadata"];
+     "gpg" -> "data_bucket" [label="encrypted\\nfile data"];
+
+   }
+
+Use GPG to only encrypt and sign metadata
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. todo:: Data encryption without GPG is not implemented yet.
+
+The following flow chart describes the mode where only metadata is
+encrypted and signed using GPG. File data is encrypted using symmetric
+**AES-256** encryption:
+
+.. graphviz::
+
+   digraph G {
+
+     node [shape="box"];
+
+     subgraph cluster_host {
+       "file" [label="File"];
+       "metadata" [label="Create\\nmetadata\\nand data\\nencryption\\nkey"];
+       "gpg" [label="Use GPG to\\nencrypt and sign\\nmetadata"];
+       "database" [label="Store metadata\\nto local\\ndatabase"];
+       "encrypt" [label="Encrypt data"];
+       label="User host";
+     }
+
+     subgraph cluster_s3 {
+       "data_bucket" [label="Data\\nBucket"];
+       "metadata_bucket" [label="Metadata\\nBucket"];
+       label="Amazon S3";
+     }
+
+     "file" -> "metadata" [label="file data"];
+     "metadata" -> "database" [label="metadata"];
+     "metadata" -> "gpg" [label="metadata"];
+     "metadata" -> "encrypt" [label="encryption\\nkey"];
+     "gpg" -> "metadata_bucket" [label="encrypted\\nand\\nsigned\\nmetadata"];
+     "file" -> "encrypt" [label="file data"];
+     "encrypt" -> "data_bucket" [label="encrypted\\nfile data"];
+
+   }
+
+Use GPG to only encrypt and sign metadata, data in encrypted in cloud
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. todo:: Data encryption in cloud is not implemented yet.
+
+The following flow chart describes the mode where only metadata is
+encrypted and signed using GPG. File data is encrypted using symmetric
+**AES-256** encryption in another cloud node:
+
+.. graphviz::
+
+   digraph G {
+
+     node [shape="box"];
+
+     subgraph cluster_host {
+       "file" [label="File"];
+       "metadata" [label="Create\\nmetadata\\nand data\\nencryption\\nkey"];
+       "gpg" [label="Use GPG to\\nencrypt and sign\\nmetadata"];
+       "database" [label="Store metadata\\nto local\\ndatabase"];
+       label="User host";
+     }
+
+     subgraph cluster_ec2 {
+       "encrypt" [label="Encrypt data"];
+       label="Amazon EC2";
+     }
+
+     subgraph cluster_s3 {
+       "data_bucket" [label="Data\\nBucket"];
+       "metadata_bucket" [label="Metadata\\nBucket"];
+       label="Amazon S3";
+     }
+
+     "file" -> "metadata" [label="file data"];
+     "metadata" -> "database" [label="metadata"];
+     "metadata" -> "gpg" [label="metadata"];
+     "metadata" -> "encrypt" [label="encryption\\nkey"];
+     "gpg" -> "metadata_bucket" [label="encrypted\\nand\\nsigned\\nmetadata"];
+     "file" -> "encrypt" [label="file data"];
+     "encrypt" -> "data_bucket" [label="encrypted\\nfile data"];
+
+   }
 
 User stories
 ============
@@ -94,8 +211,8 @@ List available files in cloud
 -----------------------------
 
 I, as the user of the tool, want to be able to list all files stored to cloud.
-It must be possible to see the metadata of the stored files, similar to `ls
--l` output:
+It must be possible to see the metadata of the stored files, similar to ``ls
+-l`` output:
 
 * file path in cloud
 * modification timestamp of the original file
