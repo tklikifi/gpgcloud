@@ -119,16 +119,14 @@ data are encrypted and signed using GPG:
 Use GPG to only encrypt and sign metadata
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. todo:: Data encryption without GPG is not implemented yet.
-
 The following flow chart describes the mode where only metadata is
 encrypted and signed using GPG. File data is encrypted using symmetric
 **AES-256** encryption:
 
 .. todo:: Document this.
 
-Use GPG to only encrypt and sign metadata, data in encrypted in cloud
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Use GPG to only encrypt and sign metadata, data is encrypted in cloud node
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. todo:: Data encryption in cloud is not implemented yet.
 
