@@ -26,11 +26,11 @@ class S3(Provider):
             bucket = self.connection.create_bucket(bucket_name.lower())
         return bucket
 
-    def __init__(self, config, bucket_name):
+    def __init__(self, config, bucket_name, encryption_method="gpg"):
         """
         Initialize Amazon S3 cloud provider.
         """
-        super(S3, self).__init__(config, bucket_name)
+        super(S3, self).__init__(config, bucket_name, encryption_method)
         self.config.check(
             "amazon-s3",
             ["access_key", "secret_access_key", ])

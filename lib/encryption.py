@@ -10,7 +10,7 @@ def generate_random_password(random_bytes=32):
     """
     Generate random password used in file encryption.
     """
-    return SHA256.new(Random.new().read(random_bytes)).hexdigest()
+    return str(SHA256.new(Random.new().read(random_bytes)).hexdigest())
 
 
 def derive_key_and_iv(password, salt, key_length, iv_length):
@@ -35,7 +35,7 @@ def encrypt(in_file, out_file, password, key_length=32, read_blocks=1024):
     ciphertext_checksum = SHA256.new()
     block_size = AES.block_size
     salt = Random.new().read(block_size)
-    key, iv = derive_key_and_iv(password, salt, key_length, block_size)
+    key, iv = derive_key_and_iv(str(password), salt, key_length, block_size)
     cipher = AES.new(key, AES.MODE_CBC, iv)
     out_file.write(salt)
     ciphertext_checksum.update(salt)
@@ -66,7 +66,7 @@ def decrypt(in_file, out_file, password, key_length=32, read_blocks=1024):
     block_size = AES.block_size
     salt = in_file.read(block_size)
     ciphertext_checksum.update(salt)
-    key, iv = derive_key_and_iv(password, salt, key_length, block_size)
+    key, iv = derive_key_and_iv(str(password), salt, key_length, block_size)
     cipher = AES.new(key, AES.MODE_CBC, iv)
     next_chunk = ""
     finished = False
@@ -87,11 +87,12 @@ def decrypt(in_file, out_file, password, key_length=32, read_blocks=1024):
 if __name__ == "__main__":
     # Small test program with string buffers.
     from StringIO import StringIO
+    import base64
+    from lib import checksum_data
 
     password = "MyPassword"
-    plaintext = "This is my test data! This is my test data!"
-    orig_plaintext_checksum = "7029fa1693a18ffad2d5c2015d9a9084" \
-                              "a172858934cfb22ab8cf5d9886d1741d"
+    plaintext = "This is my test data! This is my test data!\n" * 100
+    orig_plaintext_checksum = checksum_data(plaintext)
 
     plaintext_file = StringIO(plaintext)
 
@@ -101,6 +102,14 @@ if __name__ == "__main__":
     ciphertext_file.seek(0)
 
     assert(plaintext_checksum == orig_plaintext_checksum)
+
+    ciphertext = ciphertext_file.read()
+    ciphertext_file.seek(0)
+
+    base64_text = base64.encodestring(ciphertext)
+    new_ciphertext = base64.decodestring(base64_text)
+
+    assert(ciphertext == new_ciphertext)
 
     plaintext_file = StringIO()
     new_ciphertext_checksum, new_plaintext_checksum = decrypt(

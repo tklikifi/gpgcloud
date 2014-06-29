@@ -3,14 +3,16 @@ Handle data encryption and decryption while transferring the file to and
 from the cloud.
 """
 
+import base64
 import errno
 import gnupg
 import json
 import os
 import tempfile
+from StringIO import StringIO
 
 from lib import checksum_data, checksum_file
-from lib.encryption import generate_random_password
+from lib.encryption import generate_random_password, encrypt, decrypt
 
 
 METADATA_VERSION = 1
@@ -51,7 +53,7 @@ class Provider(object):
     """
     Base class for cloud provider.
     """
-    def  __init__(self, config, bucket_name):
+    def  __init__(self, config, bucket_name, encryption_method="gpg"):
         """
         Initialize cloud provider.
         """
@@ -59,6 +61,10 @@ class Provider(object):
         self.config.check("general", ["database"])
         self.config.check("gnupg", ["recipients", "signer"])
         self.bucket_name = bucket_name
+        if encryption_method.lower() not in ["gpg", "symmetric", ]:
+            raise ValueError(
+                "Encryption method must be either 'gpg' or 'symmetric'")
+        self.enryption_method = encryption_method
 
     @property
     def __name__(self):
@@ -137,14 +143,14 @@ class Cloud(object):
         self.signer = self.config.config.get("gnupg", "signer")
 
     def _create_metadata(self, key, filename=None, size=0, stat_info=None,
-                         checksum=None, encrypted_size=0,
-                         encrypted_checksum=None):
+                         checksum=None, encryption_key=None,
+                         encrypted_size=0, encrypted_checksum=None):
         metadata = dict(
             metadata_version=METADATA_VERSION,
             provider=self.metadata_provider.__name__, key=key, name=None,
             path=None, size=size, mode=0, uid=0, gid=0, atime=0, mtime=0,
-            ctime=0, checksum=None, encrypted_size=encrypted_size,
-            encrypted_checksum=None)
+            ctime=0, checksum=None, encryption_key=encryption_key,
+            encrypted_size=encrypted_size, encrypted_checksum=None)
         if filename is not None:
             metadata["name"] = os.path.basename(filename)
             metadata["path"] = filename
@@ -221,6 +227,59 @@ class Cloud(object):
         """
         return self.database.find_one(**filter)
 
+    def _encrypt_gpg(self, data):
+        encryption_key = None
+        encrypted_data = gpg.encrypt(
+            data, self.recipients, sign=self.signer)
+        if not encrypted_data.ok:
+            raise GPGError(encrypted_data)
+        encrypted_size = len(encrypted_data.data)
+        encrypted_checksum = checksum_data(encrypted_data.data)
+        return (encryption_key, encrypted_data.data, encrypted_size,
+                encrypted_checksum)
+
+    def _encrypt_file_gpg(self, plaintext_file, encrypted_file):
+        encryption_key = None
+        encrypted_data = gpg.encrypt_file(
+            file(plaintext_file), self.recipients, sign=self.signer,
+            output=encrypted_file)
+        if not encrypted_data.ok:
+            raise GPGError(encrypted_data)
+        encrypted_stat_info = os.stat(encrypted_file)
+        encrypted_checksum = checksum_file(encrypted_file)
+        encrypted_size = encrypted_stat_info.st_size
+        return (encryption_key, encrypted_size, encrypted_checksum)
+
+    def _encrypt_symmetric(self, data):
+        encryption_key = generate_random_password()
+        plaintext_fp = StringIO(data)
+        encrypted_fp = StringIO()
+        encrypt(plaintext_fp, encrypted_fp, encryption_key)
+        encrypted_fp.seek(0)
+        encrypted_data = encrypted_fp.read()
+        base64_data = base64.encodestring(encrypted_data)
+        base64_size = len(base64_data)
+        encrypted_checksum = checksum_data(base64_data)
+        return (encryption_key, base64_data, base64_size,
+                encrypted_checksum)
+
+    def _encrypt_file_symmetric(self, plaintext_file, encrypted_file):
+        encryption_key = generate_random_password()
+        plaintext_fp = file(plaintext_file)
+        encrypted_fp = tempfile.TemporaryFile()
+        encrypt(plaintext_fp, encrypted_fp, encryption_key)
+        encrypted_fp.flush()
+        encrypted_fp.seek(0)
+        base64_fp = file(encrypted_file, "wb")
+        base64.encode(encrypted_fp, base64_fp)
+        base64_fp.close()
+        encrypted_fp.close()
+        plaintext_fp.close()
+        encrypted_stat_info = os.stat(encrypted_file)
+        encrypted_size = encrypted_stat_info.st_size
+        encrypted_checksum = checksum_file(encrypted_file)
+        return (encryption_key, encrypted_size, encrypted_checksum)
+
     def store(self, data, cloud_filename, stat_info=None):
         """
         Encrypt data and store it to cloud.
@@ -234,21 +293,23 @@ class Cloud(object):
             provider=self.metadata_provider.__name__, checksum=checksum)
         if old_metadata:
             encrypted_data = None
+            encryption_key = old_metadata["encryption_key"]
             encrypted_checksum = old_metadata["encrypted_checksum"]
             encrypted_size = old_metadata["encrypted_size"]
         else:
             # Create encrypted data.
-            encrypted_data = gpg.encrypt(
-                data, self.recipients, sign=self.signer)
-            if not encrypted_data.ok:
-                raise GPGError(encrypted_data)
-            encrypted_checksum = checksum_data(encrypted_data.data)
-            encrypted_size = len(encrypted_data.data)
+            if self.provider.enryption_method == "symmetric":
+                (encryption_key, encrypted_data, encrypted_size,
+                 encrypted_checksum) = self._encrypt_symmetric(data)
+            else:
+                (encryption_key, encrypted_data, encrypted_size,
+                 encrypted_checksum) = self._encrypt_gpg(data)
 
         # Create encrypted metadata.
         metadata = self._create_metadata(
             key, filename=cloud_filename, size=size, stat_info=stat_info,
-            checksum=checksum, encrypted_size=encrypted_size,
+            checksum=checksum, encryption_key=encryption_key,
+            encrypted_size=encrypted_size,
             encrypted_checksum=encrypted_checksum)
         encrypted_metadata = gpg.encrypt(
             json.dumps(metadata), self.recipients, sign=self.signer)
@@ -258,7 +319,7 @@ class Cloud(object):
         # Store metadata and data to cloud and update database.
         self.metadata_provider.store(key, encrypted_metadata.data)
         if not old_metadata:
-            self.provider.store(checksum, encrypted_data.data)
+            self.provider.store(checksum, encrypted_data)
         self.database.update(metadata)
         return metadata
 
@@ -279,24 +340,23 @@ class Cloud(object):
             provider=self.metadata_provider.__name__, checksum=checksum)
         if old_metadata:
             encrypted_file = None
+            encryption_key = old_metadata["encryption_key"]
             encrypted_checksum = old_metadata["encrypted_checksum"]
             encrypted_size = old_metadata["encrypted_size"]
         else:
             # Create encrypted data file.
             encrypted_file = tempfile.NamedTemporaryFile()
-            encrypted_data = gpg.encrypt_file(
-                file(filename), self.recipients, sign=self.signer,
-                output=encrypted_file.name)
-            if not encrypted_data.ok:
-                raise GPGError(encrypted_data)
-            encrypted_stat_info = os.stat(encrypted_file.name)
-            encrypted_checksum = checksum_file(encrypted_file.name)
-            encrypted_size = encrypted_stat_info.st_size
+            if self.provider.enryption_method == "symmetric":
+                (encryption_key, encrypted_size, encrypted_checksum) =\
+                    self._encrypt_file_symmetric(filename, encrypted_file.name)
+            else:
+                (encryption_key, encrypted_size, encrypted_checksum) =\
+                    self._encrypt_file_gpg(filename, encrypted_file.name)
 
         # Create encrypted metadata.
         metadata = self._create_metadata(
-            key, filename=cloud_filename, size=size,
-            stat_info=stat_info, checksum=checksum,
+            key, filename=cloud_filename, size=size, stat_info=stat_info,
+            checksum=checksum, encryption_key=encryption_key,
             encrypted_size=encrypted_size,
             encrypted_checksum=encrypted_checksum)
         encrypted_metadata = gpg.encrypt(
@@ -308,10 +368,46 @@ class Cloud(object):
         self.metadata_provider.store(key, encrypted_metadata.data)
         if not old_metadata:
             self.provider.store_from_filename(checksum, encrypted_file.name)
-            encrypted_file.close()
         self.database.update(metadata)
 
         return metadata
+
+    def _decrypt_gpg(self, encrypted_data):
+        data = gpg.decrypt(encrypted_data)
+        if not data.ok:
+            raise GPGError(data)
+        checksum = checksum_data(data.data)
+        return data.data, checksum
+
+    def _decrypt_file_gpg(self, encrypted_file, plaintext_file):
+        data = gpg.decrypt_file(
+            file(encrypted_file), output=plaintext_file)
+        if not data.ok:
+            raise GPGError(data)
+        checksum = checksum_file(plaintext_file)
+        return checksum
+
+    def _decrypt_symmetric(self, encrypted_data, encryption_key):
+        encrypted_fp = StringIO(base64.decodestring(encrypted_data))
+        plaintext_fp = StringIO()
+        _, checksum = decrypt(encrypted_fp, plaintext_fp, encryption_key)
+        plaintext_fp.seek(0)
+        data = plaintext_fp.read()
+        return data, checksum
+
+    def _decrypt_file_symmetric(self, encrypted_file, plaintext_file,
+                                encryption_key):
+        base64_fp = file(encrypted_file)
+        encrypted_fp = tempfile.TemporaryFile()
+        base64.decode(base64_fp, encrypted_fp)
+        encrypted_fp.flush()
+        encrypted_fp.seek(0)
+        plaintext_fp = file(plaintext_file, "wb")
+        _, checksum = decrypt(encrypted_fp, plaintext_fp, encryption_key)
+        plaintext_fp.close()
+        encrypted_fp.close()
+        base64_fp.close()
+        return checksum
 
     def retrieve(self, metadata):
         """
@@ -327,16 +423,17 @@ class Cloud(object):
                     encrypted_checksum, metadata["encrypted_checksum"]))
 
         # Decrypt data.
-        data = gpg.decrypt(encrypted_data)
-        if not data.ok:
-            raise GPGError(data)
-        checksum = checksum_data(data.data)
+        if self.provider.enryption_method == "symmetric":
+            data, checksum = self._decrypt_symmetric(
+                encrypted_data, metadata["encryption_key"])
+        else:
+            data, checksum = self._decrypt_gpg(encrypted_data)
         if checksum != metadata['checksum']:
             raise DataError(
                 metadata["checksum"],
                 "Wrong data checksum: {0} != {1}".format(
                     checksum, metadata["checksum"]))
-        return data.data
+        return data
 
     def retrieve_to_filename(self, metadata, filename=None):
         """
@@ -365,11 +462,12 @@ class Cloud(object):
                     encrypted_checksum, metadata["encrypted_checksum"]))
 
         # Decrypt the data in temporary file and store it to given filename.
-        data = gpg.decrypt_file(
-            file(encrypted_file.name), output=filename)
-        if not data.ok:
-            raise GPGError(data)
-        checksum = checksum_file(filename)
+        if self.provider.enryption_method == "symmetric":
+            checksum = self._decrypt_file_symmetric(
+                encrypted_file.name, filename, metadata["encryption_key"])
+        else:
+            checksum = self._decrypt_file_gpg(
+                encrypted_file.name, filename)
         if checksum != metadata['checksum']:
             raise DataError(
                 metadata["checksum"],

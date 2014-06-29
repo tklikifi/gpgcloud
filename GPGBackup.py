@@ -54,6 +54,11 @@ def parse_args():
              "amazon-s3)",
         default="amazon-s3")
     parser.add_argument(
+        '-e', '--encryption-method', type=str,
+        help="encryption method for data stored in cloud provider: "
+             "gpg|symmetric (default: gpg)",
+        default="gpg")
+    parser.add_argument(
         '-v', '--verbose', help="show more verbose information",
         action="store_true")
     parser.add_argument(
@@ -159,10 +164,12 @@ def main():
     # Initialize cloud provider and metadata database.
     if args.provider == "amazon-s3":
         metadata_provider = amazon.S3(config, metadata_bucket)
-        provider = amazon.S3(config, data_bucket)
+        provider = amazon.S3(
+            config, data_bucket, encryption_method=args.encryption_method)
     elif args.provider == "sftp":
         metadata_provider = sftp.Sftp(config, metadata_bucket)
-        provider = sftp.Sftp(config, data_bucket)
+        provider = sftp.Sftp(
+            config, data_bucket, encryption_method=args.encryption_method)
     else:
         error_exit("Unknown cloud provider: {0}".format(args.provider))
 

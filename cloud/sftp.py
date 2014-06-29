@@ -45,11 +45,11 @@ class Sftp(Provider):
                             bucket_path, str(e)))
         return bucket_path
 
-    def __init__(self, config, bucket_name):
+    def __init__(self, config, bucket_name, encryption_method="gpg"):
         """
         Initialize SFTP filesystem provider.
         """
-        super(Sftp, self).__init__(config, bucket_name)
+        super(Sftp, self).__init__(config, bucket_name, encryption_method)
         self.config.check(
             "sftp",
             ["host", "port", "username", "identity_file",
@@ -60,6 +60,7 @@ class Sftp(Provider):
         self.identity_file = self.config.config.get("sftp", "identity_file")
         self.remote_directory = self.config.config.get(
             "sftp", "remote_directory")
+        self.encryption_method = encryption_method
         self.connection = None
 
     @property
