@@ -51,17 +51,21 @@ class Provider(object):
     """
     Base class for cloud provider.
     """
-    def  __init__(self, config):
+    def  __init__(self, config, bucket_name):
         """
         Initialize cloud provider.
         """
         self.config = config
         self.config.check("general", ["database"])
         self.config.check("gnupg", ["recipients", "signer"])
+        self.bucket_name = bucket_name
 
     @property
     def __name__(self):
-        return "cloud-provider"
+        return "cloud-provider-bucket:" + self.bucket_name
+
+    def __str__(self):
+        return self.__name__
 
     def connect(self):
         """
@@ -72,12 +76,6 @@ class Provider(object):
     def disconnect(self):
         """
         Disconnect from cloud provider.
-        """
-        pass
-
-    def store_metadata(self, key, metadata):
-        """
-        Store metadata to cloud provider.
         """
         pass
 
@@ -93,12 +91,6 @@ class Provider(object):
         """
         pass
 
-    def retrieve_metadata(self, key):
-        """
-        Retrieve metadata from cloud provider.
-        """
-        return None
-
     def retrieve(self, key):
         """
         Retrieve data from cloud provider. Return data as string.
@@ -111,30 +103,11 @@ class Provider(object):
         """
         pass
 
-    def delete_metadata(self, key):
-        """
-        Delete metadata from cloud provider.
-        """
-        pass
-
     def delete(self, key):
         """
         Delete data from cloud provider.
         """
         pass
-
-    def list_metadata(self):
-        """
-        List metadata in cloud provider. Return dictionary of keys with
-        metadata.
-        """
-        return dict()
-
-    def list_metadata_keys(self):
-        """
-        List metadata keys in cloud provider.
-        """
-        return dict()
 
     def list(self):
         """
@@ -154,8 +127,9 @@ class Cloud(object):
     """
     Basic class for cloud access.
     """
-    def __init__(self, config, provider, database):
+    def __init__(self, config, metadata_provider, provider, database):
         self.config = config
+        self.metadata_provider = metadata_provider
         self.provider = provider
         self.database = database
         self.recipients = self.config.config.get(
@@ -167,9 +141,9 @@ class Cloud(object):
                          encrypted_checksum=None):
         metadata = dict(
             metadata_version=METADATA_VERSION,
-            provider=self.provider.__name__, key=key, name=None, path=None,
-            size=size, mode=0, uid=0, gid=0, atime=0, mtime=0, ctime=0,
-            checksum=None, encrypted_size=encrypted_size,
+            provider=self.metadata_provider.__name__, key=key, name=None,
+            path=None, size=size, mode=0, uid=0, gid=0, atime=0, mtime=0,
+            ctime=0, checksum=None, encrypted_size=encrypted_size,
             encrypted_checksum=None)
         if filename is not None:
             metadata["name"] = os.path.basename(filename)
@@ -191,6 +165,7 @@ class Cloud(object):
         """
         Open connection to cloud.
         """
+        self.metadata_provider.connect()
         self.provider.connect()
         return self
 
@@ -198,14 +173,15 @@ class Cloud(object):
         """
         Close cloud connection.
         """
+        self.metadata_provider.disconnect()
         self.provider.disconnect()
 
     def sync(self):
         """
         Sync metadata database from cloud.
         """
-        self.database.drop()
-        for key, encrypted_metadata in self.provider.list_metadata().items():
+        self.database.drop(provider=self.metadata_provider.__name__)
+        for key, encrypted_metadata in self.metadata_provider.list().items():
             metadata = gpg.decrypt(encrypted_metadata)
             if not metadata.ok:
                 raise GPGError(metadata)
@@ -228,7 +204,7 @@ class Cloud(object):
         List metadata from database.
         """
         metadata = list()
-        for m in self.database.list():
+        for m in self.database.list(provider=self.metadata_provider.__name__):
             metadata.append(m)
 
         return metadata
@@ -254,7 +230,8 @@ class Cloud(object):
         size = len(data)
 
         # Do we have the data already stored into cloud?
-        old_metadata = self.database.find_one(checksum=checksum)
+        old_metadata = self.database.find_one(
+            provider=self.metadata_provider.__name__, checksum=checksum)
         if old_metadata:
             encrypted_data = None
             encrypted_checksum = old_metadata["encrypted_checksum"]
@@ -279,7 +256,7 @@ class Cloud(object):
             raise GPGError(encrypted_metadata)
 
         # Store metadata and data to cloud and update database.
-        self.provider.store_metadata(key, encrypted_metadata.data)
+        self.metadata_provider.store(key, encrypted_metadata.data)
         if not old_metadata:
             self.provider.store(checksum, encrypted_data.data)
         self.database.update(metadata)
@@ -298,7 +275,8 @@ class Cloud(object):
         size = stat_info.st_size
 
         # Do we have the data already stored into cloud?
-        old_metadata = self.database.find_one(checksum=checksum)
+        old_metadata = self.database.find_one(
+            provider=self.metadata_provider.__name__, checksum=checksum)
         if old_metadata:
             encrypted_file = None
             encrypted_checksum = old_metadata["encrypted_checksum"]
@@ -327,7 +305,7 @@ class Cloud(object):
             raise GPGError(encrypted_metadata)
 
         # Store metadata and data to cloud and update database.
-        self.provider.store_metadata(key, encrypted_metadata.data)
+        self.metadata_provider.store(key, encrypted_metadata.data)
         if not old_metadata:
             self.provider.store_from_filename(checksum, encrypted_file.name)
             encrypted_file.close()
@@ -408,8 +386,10 @@ class Cloud(object):
         """
         Delete data from cloud.
         """
-        self.provider.delete_metadata(metadata["key"])
+        self.metadata_provider.delete(metadata["key"])
         self.database.delete(metadata["key"])
-        if not self.database.find_one(checksum=metadata["checksum"]):
-            # All metadata is removed, remove the data.
+        if not self.database.find_one(
+                provider=self.metadata_provider.__name__,
+                checksum=metadata["checksum"]):
+            # Metadata is removed, remove the data.
             self.provider.delete(metadata["checksum"])

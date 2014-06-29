@@ -16,12 +16,15 @@ class MetaDataDB(object):
             self.config.config.get("general", "database"))
         self._metadata = self._database["metadata"]
 
-    def drop(self):
+    def drop(self, provider=None):
         """
         Drop database table and create it again.
         """
-        self._metadata.drop()
-        self._metadata = self._database["metadata"]
+        if provider is not None:
+            self._metadata.delete(provider=provider)
+        else:
+            self._metadata.drop()
+            self._metadata = self._database["metadata"]
 
     def update(self, metadata):
         """
@@ -29,16 +32,21 @@ class MetaDataDB(object):
         """
         self._metadata.upsert(metadata, ["name", "key"])
 
-    def delete(self, key):
+    def delete(self, key, provider=None):
         """
         Delete key from file database.
         """
-        self._metadata.delete(key=key)
+        if provider is not None:
+            self._metadata.delete(provider=provider, key=key)
+        else:
+            self._metadata.delete(key=key)
 
-    def list(self):
+    def list(self, provider=None):
         """
         List all entries in the database.
         """
+        if provider is not None:
+            return self._metadata.find(provider=provider)
         return self._metadata.all()
 
     def find(self, **filter):

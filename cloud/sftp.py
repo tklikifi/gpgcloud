@@ -3,6 +3,7 @@ Handle connection to SFTP filesystem.
 """
 
 import errno
+import os
 import paramiko
 import paramiko.pkey
 import time
@@ -23,43 +24,42 @@ class Sftp(Provider):
         Create bucket, if it does not exist.
         """
         assert(self.connection is not None)
+        bucket_path = os.path.join(self.remote_directory, bucket_name)
         try:
-            self.connection.stat(bucket_name)
+            self.connection.stat(bucket_path)
         except IOError as e:
             if e.errno != errno.ENOENT:
                 raise SftpError(
                     "Could not access bucket directory: '{0}': {1}: "
                     "Check that parent path exists and has proper "
                     "file ownership and permissions".format(
-                        bucket_name, str(e)))
+                        bucket_path, str(e)))
             try:
-                self.connection.mkdir(bucket_name, mode=0700)
+                self.connection.mkdir(bucket_path, mode=0700)
             except IOError as e:
                 if e.errno != errno.EEXIST:
                     raise SftpError(
                         "Could not create bucket directory: '{0}': {1}: "
                         "Check that parent path exists and has proper "
                         "file ownership and permissions".format(
-                            bucket_name, str(e)))
-        return bucket_name
+                            bucket_path, str(e)))
+        return bucket_path
 
-    def __init__(self, config):
+    def __init__(self, config, bucket_name):
         """
         Initialize SFTP filesystem provider.
         """
-        super(Sftp, self).__init__(config)
+        super(Sftp, self).__init__(config, bucket_name)
         self.config.check(
             "sftp",
-            ["host", "port", "username", "identity_file", "data_bucket",
-             "metadata_bucket"])
-        self.host = self.config.config.get(
-            "sftp", "host")
-        self.port = self.config.config.get(
-            "sftp", "port")
-        self.username = self.config.config.get(
-            "sftp", "username")
-        self.identity_file = self.config.config.get(
-            "sftp", "identity_file")
+            ["host", "port", "username", "identity_file",
+             "remote_directory", ])
+        self.host = self.config.config.get("sftp", "host")
+        self.port = self.config.config.get("sftp", "port")
+        self.username = self.config.config.get("sftp", "username")
+        self.identity_file = self.config.config.get("sftp", "identity_file")
+        self.remote_directory = self.config.config.get(
+            "sftp", "remote_directory")
         self.connection = None
 
     @property
@@ -67,7 +67,7 @@ class Sftp(Provider):
         """
         SFTP filesystem provider name as a simple string.
         """
-        return "sftp"
+        return "sftp-bucket:" + self.bucket_name
 
     def connect(self):
         """
@@ -82,10 +82,7 @@ class Sftp(Provider):
         self.transport = paramiko.Transport((self.host, int(self.port)))
         self.transport.connect(username=self.username, pkey=pkey)
         self.connection = paramiko.SFTPClient.from_transport(self.transport)
-        self.data_bucket = self._create_bucket(
-            self.config.config.get("sftp", "data_bucket"))
-        self.metadata_bucket = self._create_bucket(
-            self.config.config.get("sftp", "metadata_bucket"))
+        self.bucket = self._create_bucket(self.bucket_name)
         return self
 
     def disconnect(self):
@@ -97,22 +94,12 @@ class Sftp(Provider):
         self.connection.close()
         self.transport.close()
 
-    def store_metadata(self, key, metadata):
-        """
-        Store metadata to SFTP filesystem.
-        """
-        assert(self.connection is not None)
-        metadata_file = self.connection.file(
-            self.metadata_bucket + "/" + key, "w")
-        metadata_file.write(metadata)
-        metadata_file.close()
-
     def store(self, key, data):
         """
         Store data to SFTP filesystem.
         """
         assert(self.connection is not None)
-        data_file = self.connection.file(self.data_bucket + "/" + key, "w")
+        data_file = self.connection.file(self.bucket + "/" + key, "w")
         data_file.write(data)
         data_file.close()
 
@@ -121,24 +108,14 @@ class Sftp(Provider):
         Store file to SFTP filesystem.
         """
         assert(self.connection is not None)
-        self.connection.put(filename, self.data_bucket + "/" + key)
-
-    def retrieve_metadata(self, key):
-        """
-        Retrieve metadata from SFTP filesystem.
-        """
-        assert(self.connection is not None)
-        metadata_file = self.connection.file(self.metadata_bucket + "/" + key)
-        metadata = metadata_file.read()
-        metadata_file.close()
-        return metadata
+        self.connection.put(filename, self.bucket + "/" + key)
 
     def retrieve(self, key):
         """
         Retrieve data from SFTP filesystem.
         """
         assert(self.connection is not None)
-        data_file = self.connection.file(self.data_bucket + "/" + key)
+        data_file = self.connection.file(self.bucket + "/" + key)
         data = data_file.read()
         data_file.close()
         return data
@@ -148,49 +125,14 @@ class Sftp(Provider):
         Retrieve data from SFTP filesystem.
         """
         assert(self.connection is not None)
-        self.connection.get(self.data_bucket + "/" + key, filename)
-
-    def delete_metadata(self, key):
-        """
-        Delete metadata from SFTP filesystem.
-        """
-        assert(self.connection is not None)
-        self.connection.remove(self.metadata_bucket + "/" + key)
+        self.connection.get(self.bucket + "/" + key, filename)
 
     def delete(self, key):
         """
         Delete data from SFTP filesystem using.
         """
         assert(self.connection is not None)
-        self.connection.remove(self.data_bucket + "/" + key)
-
-    def list_metadata(self):
-        """
-        List metadata in SFTP filesystem. Return dictionary of keys with
-        metadata.
-        """
-        assert(self.connection is not None)
-        keys = dict()
-        for key in self.connection.listdir(self.metadata_bucket):
-            metadata_file = self.connection.file(
-                self.metadata_bucket + "/" + key)
-            keys[key] = metadata_file.read()
-            metadata_file.close()
-        return keys
-
-    def list_metadata_keys(self):
-        """
-        List metadata keys in SFTP filesystem. Return dictionary of keys.
-        """
-        assert(self.connection is not None)
-        keys = dict()
-        for key in self.connection.listdir_attr(self.metadata_bucket):
-            keys[key.filename] = key.__dict__
-            keys[key.filename]["name"] = key.filename
-            keys[key.filename]["size"] = key.st_size
-            keys[key.filename]["last_modified"] = time.strftime(
-                '%Y-%m-%d %H:%M:%S', time.localtime(key.st_mtime))
-        return keys
+        self.connection.remove(self.bucket + "/" + key)
 
     def list(self):
         """
@@ -198,8 +140,8 @@ class Sftp(Provider):
         """
         assert(self.connection is not None)
         keys = dict()
-        for key in self.connection.listdir(self.data_bucket):
-            data_file = self.connection.file(self.data_bucket + "/" + key)
+        for key in self.connection.listdir(self.bucket):
+            data_file = self.connection.file(self.bucket + "/" + key)
             keys[key] = data_file.read()
             data_file.close()
         return keys
@@ -210,7 +152,7 @@ class Sftp(Provider):
         """
         assert(self.connection is not None)
         keys = dict()
-        for key in self.connection.listdir_attr(self.data_bucket):
+        for key in self.connection.listdir_attr(self.bucket):
             keys[key.filename] = key.__dict__
             keys[key.filename]["name"] = key.filename
             keys[key.filename]["size"] = key.st_size

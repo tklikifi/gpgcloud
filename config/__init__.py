@@ -2,6 +2,8 @@
 Handle configurations. Configuration file format is basic python config
 file. Example configuration file:
 
+.. code-block:: python
+
     [general]
     database = sqlite:////home/tkl/.gpgcloud/metadata.db
 
@@ -12,16 +14,20 @@ file. Example configuration file:
     [amazon-s3]
     access_key = ACCESSKEY
     secret_access_key = SECRETACCESSKEY
-    data_bucket = DATABUCKET
-    metadata_bucket = METADATABUCKET
 
     [sftp]
     host = localhost
     port = 22
     username = tkl
     identity_file = /home/tkl/.ssh/testkey
-    data_bucket = /home/tkl/GPGCloud/backup/DATABUCKET
-    metadata_bucket = /home/tkl/GPGCloud/backup/METADATABUCKET
+    remote_directory = /home/tkl/GPGCloud/backup
+
+    [metadata]
+    bucket = METADATABUCKET
+
+    [data]
+    bucket = DATABUCKET
+
 """
 
 import ConfigParser

@@ -66,8 +66,13 @@ class TestConfig(unittest.TestCase):
                      "[amazon-s3]\n"
                      "access_key = ACCESSKEY\n"
                      "secret_access_key = SECRETACCESSKEY\n"
-                     "data_bucket = DATABUCKET\n"
-                     "metadata_bucket = METADATABUCKET\n")
+                     "\n"
+                     "[data]\n"
+                     "\n"
+                     "bucket = DATABUCKET\n"
+                     "[metadata]\n"
+                     "bucket = METADATABUCKET\n"
+                     "\n")
         if os.path.isfile("test_config.conf"):
             os.remove("test_config.conf")
         file("test_config.conf", "wb").write(test_data)
@@ -83,9 +88,9 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(config.config.get(
             "amazon-s3", "secret_access_key"), "SECRETACCESSKEY")
         self.assertEqual(config.config.get(
-            "amazon-s3", "data_bucket"), "DATABUCKET")
+            "data", "bucket"), "DATABUCKET")
         self.assertEqual(config.config.get(
-            "amazon-s3", "metadata_bucket"), "METADATABUCKET")
+            "metadata", "bucket"), "METADATABUCKET")
         os.remove("test_config.conf")
 
     def test_config_wrong_config(self):
@@ -98,16 +103,20 @@ class TestConfig(unittest.TestCase):
                        "[amazon-s3]\n"
                        "access_key = ACCESSKEY\n"
                        "secret_access_key = SECRETACCESSKEY\n"
-                       "data_bucket = DATABUCKET\n"
-                       "metadata_bucket = METADATABUCKET\n")
+                       "[data]\n"
+                       "bucket = DATABUCKET\n"
+                       "[metadata]\n"
+                       "bucket = METADATABUCKET\n")
         test_data_2 = ("[gnupg]\n"
                        "recipients_missing = tkl@iki.fi\n"
                        "signer = tkl@iki.fi\n"
                        "[amazon-s3]\n"
                        "access_key = ACCESSKEY\n"
                        "secret_access_key = SECRETACCESSKEY\n"
-                       "data_bucket = DATABUCKET\n"
-                       "metadata_bucket = METADATABUCKET\n")
+                       "[data]\n"
+                       "bucket = DATABUCKET\n"
+                       "[metadata]\n"
+                       "bucket = METADATABUCKET\n")
         if os.path.isfile("test_config.conf"):
             os.remove("test_config.conf")
         file("test_config.conf", "wb").write(test_data_1)
@@ -132,7 +141,11 @@ class TestAmazonS3(unittest.TestCase):
         """
         Test storing data to Amazons S3, both to metadata and data buckets.
         """
-        provider = amazon.S3(Config()).connect()
+        config = Config()
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = amazon.S3(Config(), metadata_bucket).connect()
+        provider = amazon.S3(Config(), data_bucket).connect()
 
         datas = dict()
         metadatas = dict()
@@ -140,39 +153,45 @@ class TestAmazonS3(unittest.TestCase):
         for data, metadata in (("Data 1", "Metadata 1"),
                                ("Data 2", "Metadata 2")):
             key = checksum_data(data)
-            provider.store_metadata(key, metadata)
+            metadata_provider.store(key, metadata)
             provider.store(key, data)
-            new_metadata = provider.retrieve_metadata(key)
+            new_metadata = metadata_provider.retrieve(key)
             new_data = provider.retrieve(key)
             self.assertEqual(new_data, data)
             self.assertEqual(new_metadata, metadata)
             datas[key] = data
             metadatas[key] = metadata
-        for key, metadata in provider.list_metadata().items():
+        for key, metadata in metadata_provider.list().items():
             self.assertEqual(metadata, metadatas[key])
         for key, data in provider.list().items():
             self.assertEqual(data, datas[key])
         for key, metadata in metadatas.items():
-            provider.delete_metadata(key)
+            metadata_provider.delete(key)
         for key, data in datas.items():
             provider.delete(key)
+        metadata_provider.disconnect()
         provider.disconnect()
 
     def test_amazon_s3_store_filename(self):
         """
         Test storing files to Amazons S3, both to metadata and data buckets.
         """
-        provider = amazon.S3(Config()).connect()
+        config = Config()
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = amazon.S3(Config(), metadata_bucket).connect()
+        provider = amazon.S3(Config(), data_bucket).connect()
         key = checksum_file("LICENSE")
-        provider.store_metadata(key, "LICENSE METADATA")
+        metadata_provider.store(key, "LICENSE METADATA")
         provider.store_from_filename(key, "LICENSE")
         t = tempfile.NamedTemporaryFile()
-        metadata = provider.retrieve_metadata(key)
+        metadata = metadata_provider.retrieve(key)
         provider.retrieve_to_filename(key, t.name)
         self.assertEqual(file("LICENSE").read(), file(t.name).read())
         self.assertEqual("LICENSE METADATA", metadata)
+        metadata_provider.delete(key)
         provider.delete(key)
-        provider.delete_metadata(key)
+        metadata_provider.disconnect()
         provider.disconnect()
 
     def test_amazon_s3_delete_all_keys(self):
@@ -180,11 +199,16 @@ class TestAmazonS3(unittest.TestCase):
         Test deleting all Amazons S3 keys, both from metadata and
         data buckets.
         """
-        provider = amazon.S3(Config()).connect()
-        for key, metadata in provider.list_metadata().items():
-            provider.delete_metadata(key)
+        config = Config()
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = amazon.S3(Config(), metadata_bucket).connect()
+        provider = amazon.S3(Config(), data_bucket).connect()
+        for key, metadata in metadata_provider.list().items():
+            metadata_provider.delete(key)
         for key, data in provider.list().items():
             provider.delete(key)
+        metadata_provider.disconnect()
         provider.disconnect()
 
 class TestSftp(unittest.TestCase):
@@ -198,7 +222,11 @@ class TestSftp(unittest.TestCase):
         """
         Test storing data to filesystem, both to metadata and data buckets.
         """
-        provider = sftp.Sftp(Config()).connect()
+        config = Config()
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = sftp.Sftp(Config(), metadata_bucket).connect()
+        provider = sftp.Sftp(Config(), data_bucket).connect()
 
         datas = dict()
         metadatas = dict()
@@ -206,22 +234,23 @@ class TestSftp(unittest.TestCase):
         for data, metadata in (("Data 1", "Metadata 1"),
                                ("Data 2", "Metadata 2")):
             key = checksum_data(data)
-            provider.store_metadata(key, metadata)
+            metadata_provider.store(key, metadata)
             provider.store(key, data)
-            new_metadata = provider.retrieve_metadata(key)
+            new_metadata = metadata_provider.retrieve(key)
             new_data = provider.retrieve(key)
             self.assertEqual(new_data, data)
             self.assertEqual(new_metadata, metadata)
             datas[key] = data
             metadatas[key] = metadata
-        for key, metadata in provider.list_metadata().items():
+        for key, metadata in metadata_provider.list().items():
             self.assertEqual(metadata, metadatas[key])
         for key, data in provider.list().items():
             self.assertEqual(data, datas[key])
         for key, metadata in metadatas.items():
-            provider.delete_metadata(key)
+            metadata_provider.delete(key)
         for key, data in datas.items():
             provider.delete(key)
+        metadata_provider.disconnect()
         provider.disconnect()
 
     def test_sftp_store_filename(self):
@@ -229,17 +258,22 @@ class TestSftp(unittest.TestCase):
         Test storing files to SFTP filesystem, both to metadata and data
         buckets.
         """
-        provider = sftp.Sftp(Config()).connect()
+        config = Config()
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = sftp.Sftp(Config(), metadata_bucket).connect()
+        provider = sftp.Sftp(Config(), data_bucket).connect()
         key = checksum_file("LICENSE")
-        provider.store_metadata(key, "LICENSE METADATA")
+        metadata_provider.store(key, "LICENSE METADATA")
         provider.store_from_filename(key, "LICENSE")
         t = tempfile.NamedTemporaryFile()
-        metadata = provider.retrieve_metadata(key)
+        metadata = metadata_provider.retrieve(key)
         provider.retrieve_to_filename(key, t.name)
         self.assertEqual(file("LICENSE").read(), file(t.name).read())
         self.assertEqual("LICENSE METADATA", metadata)
+        metadata_provider.delete(key)
         provider.delete(key)
-        provider.delete_metadata(key)
+        metadata_provider.disconnect()
         provider.disconnect()
 
     def test_sftp_delete_all_keys(self):
@@ -247,11 +281,16 @@ class TestSftp(unittest.TestCase):
         Test deleting all filesystem keys, both from metadata and
         data buckets.
         """
-        provider = sftp.Sftp(Config()).connect()
-        for key, metadata in provider.list_metadata().items():
-            provider.delete_metadata(key)
+        config = Config()
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = sftp.Sftp(Config(), metadata_bucket).connect()
+        provider = sftp.Sftp(Config(), data_bucket).connect()
+        for key, metadata in metadata_provider.list().items():
+            metadata_provider.delete(key)
         for key, data in provider.list().items():
             provider.delete(key)
+        metadata_provider.disconnect()
         provider.disconnect()
 
 class TestCloud(unittest.TestCase):
@@ -261,13 +300,13 @@ class TestCloud(unittest.TestCase):
     def setUp(self):
         pass
 
-    def _test_cloud_store_data(self, config, provider):
+    def _test_cloud_store_data(self, config, metadata_provider, provider):
         """
         Store encrypted data to cloud.
         """
         database = MetaDataDB(config)
         database.drop()
-        cloud = Cloud(config, provider, database).connect()
+        cloud = Cloud(config, metadata_provider, provider, database).connect()
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store(data1, "testdata/data1.txt")
@@ -303,19 +342,27 @@ class TestCloud(unittest.TestCase):
 
     def test_cloud_amazon_s3_store_data(self):
         config = Config()
-        self._test_cloud_store_data(config, amazon.S3(config))
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = amazon.S3(Config(), metadata_bucket).connect()
+        provider = amazon.S3(Config(), data_bucket).connect()
+        self._test_cloud_store_data(config, metadata_provider, provider)
 
     def test_cloud_sftp_store_data(self):
         config = Config()
-        self._test_cloud_store_data(config, sftp.Sftp(config))
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = sftp.Sftp(Config(), metadata_bucket).connect()
+        provider = sftp.Sftp(Config(), data_bucket).connect()
+        self._test_cloud_store_data(config, metadata_provider, provider)
 
-    def _test_cloud_store_filename(self, config, provider):
+    def _test_cloud_store_filename(self, config, metadata_provider, provider):
         """
         Store file as encrypted data to cloud.
         """
         database = MetaDataDB(config)
         database.drop()
-        cloud = Cloud(config, provider, database).connect()
+        cloud = Cloud(config, metadata_provider, provider, database).connect()
         data1 = file("testdata/data1.txt").read()
         data2 = file("testdata/data2.txt").read()
         metadata1 = cloud.store_from_filename(
@@ -364,11 +411,19 @@ class TestCloud(unittest.TestCase):
 
     def test_cloud_amazon_s3_store_filename(self):
         config = Config()
-        self._test_cloud_store_filename(config, amazon.S3(config))
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = amazon.S3(Config(), metadata_bucket).connect()
+        provider = amazon.S3(Config(), data_bucket).connect()
+        self._test_cloud_store_filename(config, metadata_provider, provider)
 
     def test_cloud_sftp_store_filename(self):
         config = Config()
-        self._test_cloud_store_filename(config, sftp.Sftp(config))
+        metadata_bucket = config.config.get("metadata", "bucket")
+        data_bucket = config.config.get("data", "bucket")
+        metadata_provider = sftp.Sftp(Config(), metadata_bucket).connect()
+        provider = sftp.Sftp(Config(), data_bucket).connect()
+        self._test_cloud_store_filename(config, metadata_provider, provider)
 
 
 if __name__ == "__main__":

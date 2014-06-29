@@ -145,6 +145,7 @@ def main():
         show_version()
 
     config = None
+    metadata_provider = None
     provider = None
 
     try:
@@ -152,15 +153,20 @@ def main():
     except ConfigError as e:
         error_exit(e)
 
+    metadata_bucket = config.config.get("metadata", "bucket")
+    data_bucket = config.config.get("data", "bucket")
+
     # Initialize cloud provider and metadata database.
     if args.provider == "amazon-s3":
-        provider = amazon.S3(config)
+        metadata_provider = amazon.S3(config, metadata_bucket)
+        provider = amazon.S3(config, data_bucket)
     elif args.provider == "sftp":
-        provider = sftp.Sftp(config)
+        metadata_provider = sftp.Sftp(config, metadata_bucket)
+        provider = sftp.Sftp(config, data_bucket)
     else:
         error_exit("Unknown cloud provider: {0}".format(args.provider))
 
-    cloud = Cloud(config, provider, MetaDataDB(config))
+    cloud = Cloud(config, metadata_provider, provider, MetaDataDB(config))
 
     input_file = None
     output_file = None
@@ -181,28 +187,32 @@ def main():
             show_files(metadata_list, args.verbose)
         elif args.command == "list-cloud-keys":
             # This is a utility command to list keys in cloud.
-            print "Cloud metadata keys:"
-            print "===================="
             cloud.connect()
-            for metadata in cloud.provider.list_metadata_keys().values():
+            msg = "Cloud metadata keys: " + str(cloud.metadata_provider)
+            print msg
+            print "=" * len(msg)
+            for metadata in cloud.metadata_provider.list_keys().values():
                 print "Key: {name}\nSize: {size}\n" \
                       "Last modified: {last_modified}\n".format(**metadata)
-            print "Cloud data keys:"
-            print "================"
+            msg = "Cloud data keys: " + str(cloud.provider)
+            print msg
+            print "=" * len(msg)
             for metadata in cloud.provider.list_keys().values():
                 print "Key: {name}\nSize: {size}\n" \
                       "Last modified: {last_modified}\n".format(**metadata)
             cloud.disconnect()
         elif args.command == "list-cloud-data":
             # This is a utility command to list raw data in cloud.
-            print "Cloud metadata:"
-            print "==============="
             cloud.connect()
-            for k, data in cloud.provider.list_metadata().items():
+            msg = "Cloud metadata: " + str(cloud.metadata_provider)
+            print msg
+            print "=" * len(msg)
+            for k, data in cloud.metadata_provider.list().items():
                 print "Key:", k
                 print "Data:", data
-            print "Cloud data:"
-            print "==========="
+            msg = "Cloud data: " + str(cloud.provider)
+            print msg
+            print "=" * len(msg)
             for k, data in cloud.provider.list().items():
                 print "Key:", k
                 print "Data:", data
