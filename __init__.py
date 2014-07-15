@@ -36,9 +36,11 @@ Run the following command to install all necessary Python modules:
 
 ``pip install -r requirements.txt``
 
+Also, ``ngingx-1.6.0`` is used as web server for the backend.
+
 Quality
 -------
-Test Driver Development (TDD) **MUST** be practiced. Before new functionality
+Test Driven Development (TDD) **MUST** be practiced. Before new functionality
 is written test code (unit tests) must be written first.
 
 All code **MUST** have unit tests.
@@ -225,5 +227,5 @@ with a given directory name.
 """
 
 __author__ = "Tommi Linnakangas"
-__date__ = "2014-03-23"
+__date__ = "2014-07-15"
 __version__ = "0.2.0"

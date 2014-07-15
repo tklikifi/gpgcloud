@@ -42,6 +42,12 @@ Encryption module
 .. automodule:: lib.encryption
    :members:
 
+Cryptoengine module
+-------------------
+
+.. automodule:: cryptoengine
+   :members:
+
 Unit tests
 ==========
 
@@ -57,6 +63,12 @@ GPGBackup
 .. automodule:: GPGBackup
    :members:
 
+Webserver
+=========
+
+.. automodule:: webserver
+   :members:
+
 Todos
 =====
 
@@ -69,3 +81,4 @@ Indices and tables
 * :ref:`modindex`
 * :ref:`search`
 
+.. include:: glossary.rst
