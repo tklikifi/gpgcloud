@@ -9,6 +9,8 @@ import gnupg
 import json
 import os
 import tempfile
+import urllib
+import urllib2
 from StringIO import StringIO
 
 from lib import checksum_data, checksum_file
@@ -70,6 +72,8 @@ class Provider(object):
                 "Encryption method must be either 'gpg', 'symmetric' or "
                 "'cryptoengine'")
         self.encryption_method = encryption_method
+        if self.encryption_method == "cryptoengine":
+            self.config.check("cryptoengine", ["api_url"])
 
     @property
     def __name__(self):
@@ -232,6 +236,20 @@ class Cloud(object):
         """
         return self.database.find_one(**filter)
 
+    def _cryptoengine_encrypt(self, data, encryption_key):
+        data = urllib.urlencode({'data': data, 'key': encryption_key, })
+        u = urllib2.urlopen(
+            self.config.config.get("cryptoengine", "api_url") + '/encrypt',
+            data)
+        return json.loads(u.read())
+
+    def _cryptoengine_decrypt(self, data, encryption_key):
+        data = urllib.urlencode({'data': data, 'key': encryption_key, })
+        u = urllib2.urlopen(
+            self.config.config.get("cryptoengine", "api_url") + '/decrypt',
+            data)
+        return json.loads(u.read())
+
     def _encrypt_gpg(self, data):
         encryption_key = None
         encrypted_data = gpg.encrypt(
@@ -270,9 +288,7 @@ class Cloud(object):
 
     def _encrypt_cryptoengine(self, data):
         encryption_key = generate_random_password()
-        res = encrypt_task.delay(data, encryption_key)
-        res.wait()
-        result = res.get()
+        result = self._cryptoengine_encrypt(data, encryption_key)
         base64_data = result["encrypted_data"]
         base64_size = len(base64_data)
         encrypted_checksum = result["encrypted_checksum"]
@@ -299,9 +315,7 @@ class Cloud(object):
     def _encrypt_file_cryptoengine(self, plaintext_file, encrypted_file):
         encryption_key = generate_random_password()
         data = file(plaintext_file).read()
-        res = encrypt_task.delay(data, encryption_key)
-        res.wait()
-        result = res.get()
+        result = self._cryptoengine_encrypt(data, encryption_key)
         base64_data = result["encrypted_data"]
         base64_size = len(base64_data)
         encrypted_checksum = result["encrypted_checksum"]
@@ -433,9 +447,7 @@ class Cloud(object):
         return data, checksum
 
     def _decrypt_cryptoengine(self, encrypted_data, encryption_key):
-        res = decrypt_task.delay(encrypted_data, encryption_key)
-        res.wait()
-        result = res.get()
+        result = self._cryptoengine_decrypt(encrypted_data, encryption_key)
         data = result["data"]
         checksum = result["checksum"]
         return data, checksum
@@ -457,9 +469,7 @@ class Cloud(object):
     def _decrypt_file_cryptoengine(self, encrypted_file, plaintext_file,
                                    encryption_key):
         encrypted_data = file(encrypted_file).read()
-        res = decrypt_task.delay(encrypted_data, encryption_key)
-        res.wait()
-        result = res.get()
+        result = self._cryptoengine_decrypt(encrypted_data, encryption_key)
         data = result["data"]
         checksum = result["checksum"]
         plaintext_fp = file(plaintext_file, "wb")
