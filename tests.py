@@ -137,7 +137,7 @@ class TestAmazonS3(unittest.TestCase):
     def setUp(self):
         pass
 
-    def _test_amazon_s3_store_data(self, encryption_method):
+    def test_amazon_s3_store_data(self):
         """
         Test storing data to Amazons S3, both to metadata and data buckets.
         """
@@ -145,7 +145,7 @@ class TestAmazonS3(unittest.TestCase):
         metadata_bucket = config.config.get("metadata", "bucket")
         data_bucket = config.config.get("data", "bucket")
         metadata_provider = amazon.S3(config, metadata_bucket).connect()
-        provider = amazon.S3(config, data_bucket, encryption_method).connect()
+        provider = amazon.S3(config, data_bucket).connect()
 
         datas = dict()
         metadatas = dict()
@@ -172,13 +172,7 @@ class TestAmazonS3(unittest.TestCase):
         metadata_provider.disconnect()
         provider.disconnect()
 
-    def test_amazon_s3_store_data_gpg_encryption(self):
-        self._test_amazon_s3_store_data(encryption_method="gpg")
-
-    def test_amazon_s3_store_data_symmetric_encryption(self):
-        self._test_amazon_s3_store_data(encryption_method="symmetric")
-
-    def _test_amazon_s3_store_filename(self, encryption_method):
+    def test_amazon_s3_store_filename(self):
         """
         Test storing files to Amazons S3, both to metadata and data buckets.
         """
@@ -186,7 +180,7 @@ class TestAmazonS3(unittest.TestCase):
         metadata_bucket = config.config.get("metadata", "bucket")
         data_bucket = config.config.get("data", "bucket")
         metadata_provider = amazon.S3(config, metadata_bucket).connect()
-        provider = amazon.S3(config, data_bucket, encryption_method).connect()
+        provider = amazon.S3(config, data_bucket).connect()
         key = checksum_file("LICENSE")
         metadata_provider.store(key, "LICENSE METADATA")
         provider.store_from_filename(key, "LICENSE")
@@ -199,12 +193,6 @@ class TestAmazonS3(unittest.TestCase):
         provider.delete(key)
         metadata_provider.disconnect()
         provider.disconnect()
-
-    def test_amazon_s3_store_filename_gpg_encryption(self):
-        self._test_amazon_s3_store_filename(encryption_method="gpg")
-
-    def test_amazon_s3_store_filename_symmetric_encryption(self):
-        self._test_amazon_s3_store_filename(encryption_method="symmetric")
 
     def test_amazon_s3_delete_all_keys(self):
         """
@@ -230,7 +218,7 @@ class TestSftp(unittest.TestCase):
     def setUp(self):
         pass
 
-    def _test_sftp_store_data(self, encryption_method):
+    def test_sftp_store_data(self):
         """
         Test storing data to filesystem, both to metadata and data buckets.
         """
@@ -238,7 +226,7 @@ class TestSftp(unittest.TestCase):
         metadata_bucket = config.config.get("metadata", "bucket")
         data_bucket = config.config.get("data", "bucket")
         metadata_provider = sftp.Sftp(config, metadata_bucket).connect()
-        provider = sftp.Sftp(config, data_bucket, encryption_method).connect()
+        provider = sftp.Sftp(config, data_bucket).connect()
 
         datas = dict()
         metadatas = dict()
@@ -265,13 +253,7 @@ class TestSftp(unittest.TestCase):
         metadata_provider.disconnect()
         provider.disconnect()
 
-    def test_sftp_store_data_gpg_encryption(self):
-        self._test_sftp_store_data(encryption_method="gpg")
-
-    def test_sftp_store_data_symmetric_encryption(self):
-        self._test_sftp_store_data(encryption_method="symmetric")
-
-    def _test_sftp_store_filename(self, encryption_method):
+    def test_sftp_store_filename(self):
         """
         Test storing files to SFTP filesystem, both to metadata and data
         buckets.
@@ -280,7 +262,7 @@ class TestSftp(unittest.TestCase):
         metadata_bucket = config.config.get("metadata", "bucket")
         data_bucket = config.config.get("data", "bucket")
         metadata_provider = sftp.Sftp(config, metadata_bucket).connect()
-        provider = sftp.Sftp(config, data_bucket, encryption_method).connect()
+        provider = sftp.Sftp(config, data_bucket).connect()
         key = checksum_file("LICENSE")
         metadata_provider.store(key, "LICENSE METADATA")
         provider.store_from_filename(key, "LICENSE")
@@ -293,12 +275,6 @@ class TestSftp(unittest.TestCase):
         provider.delete(key)
         metadata_provider.disconnect()
         provider.disconnect()
-
-    def test_sftp_store_filename_gpg_encryption(self):
-        self._test_sftp_store_filename(encryption_method="gpg")
-
-    def test_sftp_store_filename_symmetric_encryption(self):
-        self._test_sftp_store_filename(encryption_method="symmetric")
 
     def test_sftp_delete_all_keys(self):
         """
@@ -481,6 +457,21 @@ class TestCloudSymmetricEncryption(TestCloud):
 
     def test_cloud_sftp_store_filename(self):
         self._test_cloud_sftp_store_filename(encryption_method="symmetric")
+
+class TestCloudCryptoEngineEncryption(TestCloud):
+
+    def test_cloud_amazon_s3_store_data(self):
+        self._test_cloud_amazon_s3_store_data(encryption_method="cryptoengine")
+
+    def test_cloud_sftp_store_data(self):
+        self._test_cloud_sftp_store_data(encryption_method="cryptoengine")
+
+    def test_cloud_amazon_s3_store_filename(self):
+        self._test_cloud_amazon_s3_store_filename(
+            encryption_method="cryptoengine")
+
+    def test_cloud_sftp_store_filename(self):
+        self._test_cloud_sftp_store_filename(encryption_method="cryptoengine")
 
 
 if __name__ == "__main__":

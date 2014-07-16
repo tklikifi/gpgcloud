@@ -28,6 +28,9 @@ file. Example configuration file:
     [data]
     bucket = DATABUCKET
 
+    [cryptoengine-api]
+    url = https://127.0.0.1/api/v1
+
 """
 
 import ConfigParser

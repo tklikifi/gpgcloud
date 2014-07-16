@@ -14,6 +14,9 @@ from StringIO import StringIO
 from lib import checksum_data, checksum_file
 from lib.encryption import generate_random_password, encrypt, decrypt
 
+from cryptoengine.server import encrypt_data as encrypt_task
+from cryptoengine.server import decrypt_data as decrypt_task
+
 
 METADATA_VERSION = 1
 gpg = gnupg.GPG(use_agent=True)
@@ -61,10 +64,12 @@ class Provider(object):
         self.config.check("general", ["database"])
         self.config.check("gnupg", ["recipients", "signer"])
         self.bucket_name = bucket_name
-        if encryption_method.lower() not in ["gpg", "symmetric", ]:
+        if encryption_method.lower() not in ["gpg", "symmetric", 
+                                             "cryptoengine", ]:
             raise ValueError(
-                "Encryption method must be either 'gpg' or 'symmetric'")
-        self.enryption_method = encryption_method
+                "Encryption method must be either 'gpg', 'symmetric' or "
+                "'cryptoengine'")
+        self.encryption_method = encryption_method
 
     @property
     def __name__(self):
@@ -263,6 +268,17 @@ class Cloud(object):
         return (encryption_key, base64_data, base64_size,
                 encrypted_checksum)
 
+    def _encrypt_cryptoengine(self, data):
+        encryption_key = generate_random_password()
+        res = encrypt_task.delay(data, encryption_key)
+        res.wait()
+        result = res.get()
+        base64_data = result["encrypted_data"]
+        base64_size = len(base64_data)
+        encrypted_checksum = result["encrypted_checksum"]
+        return (encryption_key, base64_data, base64_size,
+                encrypted_checksum)
+
     def _encrypt_file_symmetric(self, plaintext_file, encrypted_file):
         encryption_key = generate_random_password()
         plaintext_fp = file(plaintext_file)
@@ -279,6 +295,20 @@ class Cloud(object):
         encrypted_size = encrypted_stat_info.st_size
         encrypted_checksum = checksum_file(encrypted_file)
         return (encryption_key, encrypted_size, encrypted_checksum)
+
+    def _encrypt_file_cryptoengine(self, plaintext_file, encrypted_file):
+        encryption_key = generate_random_password()
+        data = file(plaintext_file).read()
+        res = encrypt_task.delay(data, encryption_key)
+        res.wait()
+        result = res.get()
+        base64_data = result["encrypted_data"]
+        base64_size = len(base64_data)
+        encrypted_checksum = result["encrypted_checksum"]
+        encrypted_fp = file(encrypted_file, "wb")
+        encrypted_fp.write(base64_data)
+        encrypted_fp.close()
+        return (encryption_key, base64_size, encrypted_checksum)
 
     def store(self, data, cloud_filename, stat_info=None):
         """
@@ -298,9 +328,12 @@ class Cloud(object):
             encrypted_size = old_metadata["encrypted_size"]
         else:
             # Create encrypted data.
-            if self.provider.enryption_method == "symmetric":
+            if self.provider.encryption_method == "symmetric":
                 (encryption_key, encrypted_data, encrypted_size,
                  encrypted_checksum) = self._encrypt_symmetric(data)
+            elif self.provider.encryption_method == "cryptoengine":
+                (encryption_key, encrypted_data, encrypted_size,
+                 encrypted_checksum) = self._encrypt_cryptoengine(data)
             else:
                 (encryption_key, encrypted_data, encrypted_size,
                  encrypted_checksum) = self._encrypt_gpg(data)
@@ -346,9 +379,13 @@ class Cloud(object):
         else:
             # Create encrypted data file.
             encrypted_file = tempfile.NamedTemporaryFile()
-            if self.provider.enryption_method == "symmetric":
+            if self.provider.encryption_method == "symmetric":
                 (encryption_key, encrypted_size, encrypted_checksum) =\
                     self._encrypt_file_symmetric(filename, encrypted_file.name)
+            elif self.provider.encryption_method == "cryptoengine":
+                (encryption_key, encrypted_size, encrypted_checksum) =\
+                    self._encrypt_file_cryptoengine(
+                        filename, encrypted_file.name)
             else:
                 (encryption_key, encrypted_size, encrypted_checksum) =\
                     self._encrypt_file_gpg(filename, encrypted_file.name)
@@ -395,6 +432,14 @@ class Cloud(object):
         data = plaintext_fp.read()
         return data, checksum
 
+    def _decrypt_cryptoengine(self, encrypted_data, encryption_key):
+        res = decrypt_task.delay(encrypted_data, encryption_key)
+        res.wait()
+        result = res.get()
+        data = result["data"]
+        checksum = result["checksum"]
+        return data, checksum
+
     def _decrypt_file_symmetric(self, encrypted_file, plaintext_file,
                                 encryption_key):
         base64_fp = file(encrypted_file)
@@ -407,6 +452,19 @@ class Cloud(object):
         plaintext_fp.close()
         encrypted_fp.close()
         base64_fp.close()
+        return checksum
+
+    def _decrypt_file_cryptoengine(self, encrypted_file, plaintext_file,
+                                   encryption_key):
+        encrypted_data = file(encrypted_file).read()
+        res = decrypt_task.delay(encrypted_data, encryption_key)
+        res.wait()
+        result = res.get()
+        data = result["data"]
+        checksum = result["checksum"]
+        plaintext_fp = file(plaintext_file, "wb")
+        plaintext_fp.write(data)
+        plaintext_fp.close()
         return checksum
 
     def retrieve(self, metadata):
@@ -423,8 +481,11 @@ class Cloud(object):
                     encrypted_checksum, metadata["encrypted_checksum"]))
 
         # Decrypt data.
-        if self.provider.enryption_method == "symmetric":
+        if self.provider.encryption_method == "symmetric":
             data, checksum = self._decrypt_symmetric(
+                encrypted_data, metadata["encryption_key"])
+        elif self.provider.encryption_method == "cryptoengine":
+            data, checksum = self._decrypt_cryptoengine(
                 encrypted_data, metadata["encryption_key"])
         else:
             data, checksum = self._decrypt_gpg(encrypted_data)
@@ -462,8 +523,11 @@ class Cloud(object):
                     encrypted_checksum, metadata["encrypted_checksum"]))
 
         # Decrypt the data in temporary file and store it to given filename.
-        if self.provider.enryption_method == "symmetric":
+        if self.provider.encryption_method == "symmetric":
             checksum = self._decrypt_file_symmetric(
+                encrypted_file.name, filename, metadata["encryption_key"])
+        elif self.provider.encryption_method == "cryptoengine":
+            checksum = self._decrypt_file_cryptoengine(
                 encrypted_file.name, filename, metadata["encryption_key"])
         else:
             checksum = self._decrypt_file_gpg(

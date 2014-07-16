@@ -5,7 +5,8 @@ pycrypto==2.6.1
 python_gnupg==0.3.6
 sphinx==1.2.2
 gunicorn==19.0.0
-Flask==0.10.1
-Celery==3.1.13
-Flask-Celery==2.4.3
 redis==2.10.1
+Celery==3.1.13
+Flask==0.10.1
+Flask-Celery==2.4.3
+Flask-RESTful==0.2.12
