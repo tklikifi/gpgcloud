@@ -43,7 +43,7 @@ gunicorn_
 
 gunicorn_ is installed as part of python requirements.
 
-Start gunicorn_.
+Start gunicorn_ in GPGCloud project directory.
 
 .. code-block:: bash
 

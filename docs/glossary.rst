@@ -8,4 +8,5 @@ Glossary
 .. _PGP: http://www.symantec.com/encryption
 .. _NGINX: http://nginx.com
 .. _gunicorn: http://gunicorn.org
-
+.. _redis: http://redis.io
+.. _celery: http://www.celeryproject.org
