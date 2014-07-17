@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument(
         '-e', '--encryption-method', type=str,
         help="encryption method for data stored in cloud provider: "
-             "gpg|symmetric (default: gpg)",
+             "gpg|symmetric|cryptoengine (default: gpg)",
         default="gpg")
     parser.add_argument(
         '-v', '--verbose', help="show more verbose information",

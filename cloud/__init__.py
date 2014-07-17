@@ -16,9 +16,6 @@ from StringIO import StringIO
 from lib import checksum_data, checksum_file
 from lib.encryption import generate_random_password, encrypt, decrypt
 
-from cryptoengine.server import encrypt_data as encrypt_task
-from cryptoengine.server import decrypt_data as decrypt_task
-
 
 METADATA_VERSION = 1
 gpg = gnupg.GPG(use_agent=True)
@@ -66,8 +63,8 @@ class Provider(object):
         self.config.check("general", ["database"])
         self.config.check("gnupg", ["recipients", "signer"])
         self.bucket_name = bucket_name
-        if encryption_method.lower() not in ["gpg", "symmetric", 
-                                             "cryptoengine", ]:
+        if encryption_method.lower() not in [
+            "gpg", "symmetric", "cryptoengine", ]:
             raise ValueError(
                 "Encryption method must be either 'gpg', 'symmetric' or "
                 "'cryptoengine'")
@@ -237,6 +234,9 @@ class Cloud(object):
         return self.database.find_one(**filter)
 
     def _cryptoengine_encrypt(self, data, encryption_key):
+        """
+        Encrypt data in crypto engine server.
+        """
         data = urllib.urlencode({'data': data, 'key': encryption_key, })
         u = urllib2.urlopen(
             self.config.config.get("cryptoengine", "api_url") + '/encrypt',
@@ -244,6 +244,9 @@ class Cloud(object):
         return json.loads(u.read())
 
     def _cryptoengine_decrypt(self, data, encryption_key):
+        """
+        Decrypt data in crypto engine server.
+        """
         data = urllib.urlencode({'data': data, 'key': encryption_key, })
         u = urllib2.urlopen(
             self.config.config.get("cryptoengine", "api_url") + '/decrypt',
