@@ -40,20 +40,24 @@ parser.add_argument('key', type=str)
 
 
 @celery.task()
-def encrypt_data(data, encryption_key):
+def encrypt_data(base64_data, encryption_key):
     """
     Encrypt data with the given encryption key.
     """
+    data = base64.decodestring(base64_data)
     plaintext_fp = StringIO(data)
     encrypted_fp = StringIO()
     checksum, _= encryption.encrypt(
         plaintext_fp, encrypted_fp, encryption_key)
     encrypted_fp.seek(0)
     encrypted_data = encrypted_fp.read()
-    base64_data = base64.encodestring(encrypted_data)
-    encrypted_checksum = checksum_data(base64_data)
+    # Encrypted data is BASE64 encoded string. Checksum for the encrypted
+    # data is always calculated over BASE64 encoded data which is stored
+    # into the cloud.
+    base64_encrypted_data = base64.encodestring(encrypted_data)
+    encrypted_checksum = checksum_data(base64_encrypted_data)
     return {"checksum": checksum,
-            "encrypted_data": base64_data,
+            "encrypted_data": base64_encrypted_data,
             "encrypted_checksum": encrypted_checksum, }
 
 
@@ -63,14 +67,14 @@ class Encrypt(Resource):
     """
     def post(self):
         args = parser.parse_args()
-        data = args.get('data', None)
-        if not data:
-            abort(409, message="No data")
+        base64_data = args.get('data', None)
         encryption_key = args.get('key', None)
         if not encryption_key:
             abort(409, message="No encryption key")
+        if not base64_data:
+            abort(409, message="No data")
         try:
-            res = encrypt_data.delay(data, encryption_key)
+            res = encrypt_data.delay(base64_data, encryption_key)
             res.wait()
             return res.get(), 201
         except Exception as e:
@@ -78,18 +82,25 @@ class Encrypt(Resource):
 
 
 @celery.task()
-def decrypt_data(encrypted_data, encryption_key):
+def decrypt_data(base64_encrypted_data, encryption_key):
     """
     Decrypt encrypted data with the given encryption key.
+
+    Encrypted data is BASE64 encoded string. Checksum for the encrypted
+    data is always calculated over BASE64 encoded data which is stored
+    into the cloud. Return decrypted data as BASE64 encoded string.
     """
-    encrypted_fp = StringIO(base64.decodestring(encrypted_data))
+    encrypted_checksum = checksum_data(base64_encrypted_data)
+    encrypted_data = base64.decodestring(base64_encrypted_data)
+    encrypted_fp = StringIO(encrypted_data)
     plaintext_fp = StringIO()
-    encrypted_checksum, checksum = encryption.decrypt(
+    _, checksum = encryption.decrypt(
         encrypted_fp, plaintext_fp, encryption_key)
     plaintext_fp.seek(0)
     data = plaintext_fp.read()
+    base64_data = base64.encodestring(data)
     return {"encrypted_checksum": encrypted_checksum,
-            "data": data,
+            "data": base64_data,
             "checksum": checksum, }
 
 
@@ -99,14 +110,14 @@ class Decrypt(Resource):
     """
     def post(self):
         args = parser.parse_args()
-        data = args.get('data', None)
-        if not data:
-            abort(409, message="No encrypted data")
         encryption_key = args.get('key', None)
         if not encryption_key:
             abort(409, message="No encryption key")
+        base64_encrypted_data = args.get('data', None)
+        if not base64_encrypted_data:
+            abort(409, message="No encrypted data")
         try:
-            res = decrypt_data.delay(data, encryption_key)
+            res = decrypt_data.delay(base64_encrypted_data, encryption_key)
             res.wait()
             return res.get(), 201
         except Exception as e:
@@ -120,4 +131,4 @@ api.add_resource(Decrypt, API_URL + '/decrypt')
 
 
 if __name__ == "__main__":
-    app.run()
+    app.run(port=8000, debug=True)

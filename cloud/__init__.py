@@ -237,7 +237,8 @@ class Cloud(object):
         """
         Encrypt data in crypto engine server.
         """
-        data = urllib.urlencode({'data': data, 'key': encryption_key, })
+        data = urllib.urlencode(
+            {'data': base64.encodestring(data), 'key': encryption_key, })
         u = urllib2.urlopen(
             self.config.config.get("cryptoengine", "api_url") + '/encrypt',
             data)
@@ -251,7 +252,9 @@ class Cloud(object):
         u = urllib2.urlopen(
             self.config.config.get("cryptoengine", "api_url") + '/decrypt',
             data)
-        return json.loads(u.read())
+        result = json.loads(u.read())
+        result["data"] = base64.decodestring(result["data"])
+        return result
 
     def _encrypt_gpg(self, data):
         encryption_key = None
